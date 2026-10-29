@@ -138,6 +138,13 @@ export const PHYSICS = Object.freeze({
   wallMinExitSpeed: 2.5,
   wallRearmDistance: 12,
   wallHitCooldownMs: 90,
+  // A bulky piece that has paid real fracture work keeps its remaining
+  // momentum while its trailing edge clears that opening. This is passive
+  // drag relief, never another impulse or a change to its ordinary material.
+  breakthroughMinMass: 25,
+  breakthroughDragScale: .25,
+  breakthroughMaxMs: 700,
+  breakthroughClearance: 2,
   deliveryContactEpsilon: .2,
 });
 const STEP = PHYSICS.stepMs;
@@ -177,6 +184,7 @@ export class MovingWorld {
     this._queuedBreaks = [];
     this._lastImpact = new Map();
     this._wallStrikes = new Map();
+    this._breakthrough = new Map();
     this.walls = [];
     this.bodies = FURNITURE.map((spec) => {
       const reference=REFERENCE_FURNITURE.find(item=>item.id===spec.id);
@@ -288,6 +296,7 @@ export class MovingWorld {
       const db = Vector.magnitudeSquared(Vector.sub(this.pointer, b.position));
       return da - db;
     })[0];
+    this._breakthrough.delete(body);
     const local = Vector.rotate(Vector.sub(this.pointer, body.position), -body.angle);
     // Keep the grab anchor inside the physical body even for an expanded hit.
     local.x = Math.max(-body.game.w / 2 + 3, Math.min(body.game.w / 2 - 3, local.x));
@@ -377,15 +386,26 @@ export class MovingWorld {
     const { Engine, Body, Vector, Composite } = this.M;
     this.elapsedMs += dt;
     this._rearmWallStrikes();
-    Engine.update(this.engine, dt);
+    const airOverrides=[];
+    // Matter reads frictionAir inside its integrator. Restore the authored
+    // value immediately afterwards, including when a callback throws: UI,
+    // route planning and subsequent launches always see the real profile.
+    for(const body of this.bodies)if(this._breakthroughActive(body)){
+      airOverrides.push([body,body.frictionAir]);
+      body.frictionAir*=PHYSICS.breakthroughDragScale;
+    }
+    try { Engine.update(this.engine, dt); }
+    finally { for(const [body,air]of airOverrides)body.frictionAir=air; }
     for (const body of this.bodies) {
       const speed = Vector.magnitude(body.velocity);
       if (speed > MAX_SPEED) Body.setVelocity(body, Vector.mult(body.velocity, MAX_SPEED / speed));
       if (Math.abs(body.angularVelocity) > PHYSICS.angularCap) Body.setAngularVelocity(body, Math.sign(body.angularVelocity) * PHYSICS.angularCap);
       if (!body.isStatic) {
-        const retention = Math.exp(-body.game.floorDamping * dt / PHYSICS.floorBaseMs);
-        Body.setVelocity(body, Vector.mult(body.velocity, retention));
-        Body.setAngularVelocity(body, body.angularVelocity * retention
+        const rotationRetention = Math.exp(-body.game.floorDamping * dt / PHYSICS.floorBaseMs);
+        const dragScale=this._breakthroughActive(body)?PHYSICS.breakthroughDragScale:1;
+        Body.setVelocity(body, Vector.mult(body.velocity,
+          Math.exp(-body.game.floorDamping * dragScale * dt / PHYSICS.floorBaseMs)));
+        Body.setAngularVelocity(body, body.angularVelocity * rotationRetention
           * Math.exp(-PHYSICS.spinDamping*dt/PHYSICS.floorBaseMs));
       }
       body.game.impact = Math.max(0, body.game.impact - dt / 220);
@@ -418,6 +438,33 @@ export class MovingWorld {
         this.onDeliver?.(body);
       }
     }
+  }
+
+  _breakthroughActive(body) {
+    const state=this._breakthrough.get(body);
+    if(!state)return false;
+    const {Body,Vector}=this.M;
+    const trailing=Math.max(...body.vertices.map(vertex=>Vector.dot(vertex,state.normal)));
+    if(body.isStatic||this.elapsedMs>=state.until
+      ||Vector.dot(Body.getVelocity(body),state.normal)>=0
+      ||trailing<=state.plane-PHYSICS.breakthroughClearance){
+      this._breakthrough.delete(body);return false;
+    }
+    return true;
+  }
+
+  _startBreakthrough(body,wall,normal) {
+    if(body.mass<PHYSICS.breakthroughMinMass)return;
+    const existing=this._breakthrough.get(body);
+    // Adjacent panels from the same solver event share one deadline. Later
+    // independent paid fractures can open another passage, but never stack
+    // multipliers or credit the same destroyed panel again.
+    const sameStrike=existing&&existing.at===this.elapsedMs;
+    this._breakthrough.set(body,{at:this.elapsedMs,
+      until:sameStrike?existing.until:this.elapsedMs+PHYSICS.breakthroughMaxMs,
+      normal:{...normal},
+      plane:Math.min(...wall.vertices.map(vertex=>this.M.Vector.dot(vertex,normal))),
+      wallId:wall.game.id});
   }
 
   _rearmWallStrikes() {
@@ -475,6 +522,7 @@ export class MovingWorld {
 
   _reboundContact(body,other,pair,contact,restitution) {
     if(contact.speed<PHYSICS.contactReboundMinSpeed)return 0;
+    this._breakthrough.delete(body);this._breakthrough.delete(other);
     const {Body,Vector}=this.M;
     // One conservative normal impulse at the actual support-manifold centre.
     // Matter's per-corner flat-face solve otherwise collapses low restitution
@@ -558,6 +606,7 @@ export class MovingWorld {
       Body.setVelocity(body,Vector.add(velocity,Vector.mult(normal,impulse*body.inverseMass)));
       Body.setAngularVelocity(body,angularVelocity+lever*impulse*body.inverseInertia);
       info.fractureWork=fractureWork;info.exitSpeed=exitSpeed;
+      this._startBreakthrough(body,wall,normal);
       this.brokenCount++;this._queuedBreaks.push(wall);
     }else{
       info.normalImpulse=this._reboundContact(body,wall,pair,contact,pair.restitution);

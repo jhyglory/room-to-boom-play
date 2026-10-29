@@ -146,7 +146,6 @@ body.showing-result { background: #101e2a; }
   letter-spacing: .6px;
   transform: rotate(4deg);
 }
-#result-best.result-record-note,
 #challenge-result.result-challenge-note { margin: 8px 0 0; color: #826e58; font-size: 10px; line-height: 13px; font-weight: 800; }
 #challenge-result.result-challenge-note { margin-top: 3px; color: #236345; }
 .result-ranking { display: flex; flex-direction: column; min-height: 0; margin-top: 6px; }
@@ -170,8 +169,6 @@ body.showing-result { background: #101e2a; }
 .result-podium-place > .result-player-name { margin-top: 3px; }
 .result-player-time { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 1000; }
 .result-player-time small { margin-left: 1px; font-size: .7em; }
-.result-run-note { display: block; margin: 2px 0 0; color: #52745d; font-size: 9px; line-height: 12px; font-weight: 900; letter-spacing: 0; }
-.result-player-time .result-run-note { margin-left: 0; font-size: 9px; }
 .result-podium-place > .result-player-time { display: block; width: 100%; margin-top: 3px; padding: 2px 3px; border: 2px solid #756249; border-radius: 9px; background: linear-gradient(#111e23, #061015); color: #ffd428; box-shadow: inset 0 2px 3px #0008; font: 900 clamp(15px, 4.2vw, 24px)/21px 'Nunito', monospace; text-shadow: 0 0 4px #ffbc214d; text-align: center; }
 .result-podium-place.is-empty .result-avatar { opacity: .55; }
 .result-podium-place.is-empty .result-player-name { color: #94846d; font-size: 11px; }
@@ -248,7 +245,6 @@ body.showing-result { background: #101e2a; }
   .result-panel-head { padding: 3px 9px 6px; border-radius: 18px 18px 12px 12px; }
   .result-title { font-size: clamp(31px, 8vw, 44px); line-height: 1.1; text-shadow: 0 2px #f29715, 0 4px #062038, 0 6px #062038; }
   .result-title span { text-shadow: 0 2px #1bbd7c, 0 4px #062038, 0 6px #062038; }
-  #result-best.result-record-note { margin-top: 6px; font-size: 9px; line-height: 11px; }
   .result-new-best { top: -10px; padding: 1px 7px; font-size: 8px; line-height: 12px; }
   .result-ranking { margin-top: 3px; }
   .result-ranking-heading { min-height: 25px; padding-bottom: 1px; }
@@ -370,7 +366,6 @@ body.showing-result { background: #101e2a; }
 .result-heading-wrap::before,
 .result-heading-wrap::after { content: none; }
 .result-new-best { top: -12px; right: 4px; }
-#result-best.result-record-note { margin-top: 3px; }
 .result-ranking {
   position: relative;
   isolation: isolate;
@@ -525,7 +520,6 @@ body.showing-result { background: #101e2a; }
   .result-panel::before { border-image-width: 28px 28px 34px; }
   .result-panel-head { padding: 0 3px 4px; }
   .result-heading-wrap { width: min(100%, 285px); }
-  #result-best.result-record-note { margin-top: 2px; }
   .result-ranking { margin-top: 2px; padding-top: 3px; padding-bottom: 4px; }
   .result-ranking::before { border-image-width: 30px 19px 19px; }
   .result-podium-place { padding-top: 17px; }
@@ -917,5 +911,75 @@ img.result-avatar { object-fit: contain; }
 }
 .result-share-content:has(#manual-share[hidden]):has(#share-status:empty) { display: none; }
 .result-footer-secondary:has(#manual-share[hidden]):has(#share-status:empty) { display: none; }
+
+/* The completed run is the primary result. Rankings keep their saved bests;
+   the footer contains the own rank without repeating either score. */
+.result-screen { --result-top: clamp(110px, 22svh, 200px); }
+.result-panel-head { padding-bottom: 10px; }
+.result-heading-wrap { width: min(100%, 390px); }
+.result-current-record {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  margin-top: 8px;
+  color: #6b5841;
+  line-height: 1;
+}
+.result-current-label { font-size: 10px; line-height: 14px; font-weight: 1000; letter-spacing: 1.7px; }
+.result-run-scoreline { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 7px 10px; max-width: 100%; }
+#result-current-time {
+  display: inline-block;
+  max-width: 100%;
+  padding: 3px 10px 5px;
+  border: 2px solid #405161;
+  border-radius: 12px;
+  background: linear-gradient(#142b38, #071720);
+  box-shadow: inset 0 3px 5px #0008, 0 2px 0 #c4ab83;
+  color: #ffd467;
+  font: 1000 clamp(38px, 11vw, 60px)/1 'Nunito', monospace;
+  letter-spacing: -1.8px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow: 0 0 5px #ffad303d;
+}
+#result-current-time small { margin-left: 3px; font-size: .43em; letter-spacing: 0; }
+.result-new-best {
+  position: static;
+  padding: 5px 8px;
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: .35px;
+  white-space: nowrap;
+  transform: rotate(-3deg);
+}
+.result-personal-best { margin: 3px 0 0; color: #74604a; font-size: 12px; line-height: 17px; font-weight: 800; }
+.result-personal-best strong { margin-left: 4px; color: #335f4e; font-size: inherit; font-variant-numeric: tabular-nums; }
+.result-view:not(.ranking-only) #result-ranked-best { display: none; }
+.result-view:not(.ranking-only) .result-ranking { margin-top: 6px; }
+@media (max-height: 710px) {
+  .result-screen { --result-top: clamp(60px, 11.5svh, 76px); }
+  .result-panel-head { padding-bottom: 6px; }
+  .result-heading-wrap { width: min(100%, 245px); }
+  .result-current-record { margin-top: 5px; gap: 2px; }
+  .result-current-label { font-size: 9px; line-height: 12px; }
+  #result-current-time { font-size: clamp(34px, 10vw, 45px); padding: 2px 8px 4px; }
+  .result-new-best { padding: 3px 6px; font-size: 9px; line-height: 13px; }
+  .result-personal-best { font-size: 11px; line-height: 15px; margin-top: 2px; }
+}
+@media (max-width: 359px) {
+  #result-current-time.long-time { font-size: 31px; letter-spacing: -1.2px; }
+  #result-current-time.very-long-time { font-size: 28px; }
+  .result-run-scoreline { gap: 5px 7px; }
+}
+@media (max-height: 490px) and (min-width: 600px) {
+  .result-screen { --result-top: 60px; }
+  .result-panel-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; }
+  .result-heading-wrap { width: min(100%, 220px); }
+  .result-current-record { margin-top: 0; }
+  #result-current-time { font-size: 35px; }
+  .result-personal-best { font-size: 10px; }
+  .result-challenge-note, .result-load-state { grid-column: 1 / -1; }
+  .ranking-only .result-panel-head { display: block; }
+}
 .result-share #share-status { margin: 2px 0 0; color: #3c6656; }
 .result-share #manual-share { display: block; width: 100%; margin-top: 4px; text-align: left; }

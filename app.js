@@ -1,11 +1,11 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.18.0';
-import { GameRenderer } from './render.js?v=0.18.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.19.0';
+import { GameRenderer } from './render.js?v=0.19.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.18.0';
+import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.19.0';
 import { GameAudio } from './audio.js?v=0.18.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.18.0';
-import { LEADERBOARD_MODE } from './runtime-config.js?v=0.18.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.19.0';
+import { LEADERBOARD_MODE } from './runtime-config.js?v=0.19.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
 function readSetting(key){try{return storage()?.getItem(key);}catch{return null;}}
@@ -112,7 +112,9 @@ function activateSound(cue='enable',{resume=false}={}){
 function clearResult(){
   runVersion++;resultSeconds=null;
   resultBoard=null;resultSubmissionId=null;
+  resultWasNewBest=false;
   nicknameEditing=false;nicknameSaving=false;leaderboardSyncing=false;
+  paintCompletionRecord();
   $('result-load-state').textContent='';
   $('share-status').textContent='';$('manual-share').hidden=true;
   $('share-result').disabled=false;
@@ -158,6 +160,8 @@ function showPhase(){
   $('retry-result').hidden=phase==='rankings';
   $('share-result').hidden=phase!=='complete';
   $('result-main').hidden=phase!=='rankings';
+  $('result-ranked-best').hidden=phase!=='rankings';
+  paintCompletionRecord();
   document.body.classList.toggle('showing-result',isRankingScreen());
   $('result-overlay').setAttribute('aria-hidden',String(!isRankingScreen()));
   $('result-overlay').setAttribute('aria-labelledby',phase==='rankings'?'rankings-title':'result-title');
@@ -218,7 +222,12 @@ function paintNickname(){
 }
 function paintLeaderboard(board){
   resultBoard=board;
-  $('result-board').innerHTML=renderLeaderboardHTML(board,{currentSeconds:resultSeconds});
+  // A server refresh or a profile rename can reveal a faster saved best too.
+  // It updates the auxiliary record, never this run or the ranking entries.
+  if(board.me && (best===null||board.me.seconds<best)){
+    best=board.me.seconds;saveBest(storage(),best);updateBest();
+  }
+  $('result-board').innerHTML=renderLeaderboardHTML(board);
   $('result-board').setAttribute('data-count',String(board.top.length));
   $('result-scope').textContent=board.scope==='server'?'This server':'On this device';
   $('result-total').textContent=`${board.total} ${board.total===1?'player':'players'}`;
@@ -226,6 +235,7 @@ function paintLeaderboard(board){
   $('result-my-time').textContent=board.me?`${board.me.seconds.toFixed(2)}s`:'—';
   $('result-sync-state').textContent=board.syncError?'Offline. Showing your saved record on this device.':'';
   $('result-load-state').textContent=board.syncError?'Offline. Showing your saved record on this device.':'';
+  paintCompletionRecord();
   paintNickname();
 }
 function setNewBestBadge(enabled){
@@ -233,18 +243,29 @@ function setNewBestBadge(enabled){
   $('result-badge').hidden=!enabled;
   $('result-badge').classList.toggle('new-best',enabled);
 }
+function paintCompletionRecord(){
+  const completed=phase==='complete'&&resultSeconds!==null;
+  const isNewBest=completed&&resultWasNewBest&&best===resultSeconds;
+  $('result-current-record').hidden=!completed;
+  // This immutable elapsed result is never replaced by a leaderboard best.
+  $('result-time').textContent=completed?resultSeconds.toFixed(2):'—';
+  $('result-current-time').classList.toggle('long-time',completed&&resultSeconds>=1000);
+  $('result-current-time').classList.toggle('very-long-time',completed&&resultSeconds>=10000);
+  $('result-personal-best-time').textContent=best===null?'—':`${best.toFixed(2)}s`;
+  $('result-personal-best').hidden=!completed||isNewBest||best===null;
+  setNewBestBadge(isNewBest&&(!leaderboard.serverEnabled||!leaderboardSyncing));
+}
 async function syncLeaderboard(){
   if(phase!=='complete'||resultSeconds===null||leaderboardSyncing)return;
   const version=runVersion;
-  leaderboardSyncing=true;paintNickname();
+  leaderboardSyncing=true;paintNickname();paintCompletionRecord();
   // A completion submits its own elapsed time. Browser bests may belong to an
   // older cookie; only the server can compare its authenticated player's best.
   const board=await leaderboard.submit(resultSeconds,{submissionId:resultSubmissionId});
   if(version!==runVersion||phase!=='complete')return;
-  if(board.me && board.me.seconds<best){best=board.me.seconds;saveBest(storage(),best);updateBest();}
+  if(board.scope==='server')resultWasNewBest=resultWasNewBest&&board.isNewBest===true&&board.me?.seconds===resultSeconds;
   leaderboardSyncing=false;
   paintLeaderboard(board);
-  if(board.scope==='server')setNewBestBadge(resultWasNewBest&&board.isNewBest===true&&board.me?.seconds===resultSeconds);
 }
 function editNickname(){
   if(!isRankingScreen()||nicknameSaving||leaderboardSyncing)return;
@@ -306,14 +327,13 @@ function finish(){
   updateBest();
   resultWasNewBest=isNewBest;
   setNewBestBadge(isNewBest);
-  $('result-best').textContent=`Best ${best.toFixed(2)}s${saved.persisted?' · Saved on this browser':' · This session; storage unavailable'}`;
   $('challenge-result').hidden=!challenge;
   if(challenge){
     const delta=Number((resultSeconds-challenge.seconds).toFixed(2));
     $('challenge-result').textContent=delta<0?`YOU BEAT ${challenge.seconds.toFixed(2)}s BY ${Math.abs(delta).toFixed(2)}s!`:delta===0?`A PERFECT TIE AT ${challenge.seconds.toFixed(2)}s!`:`${delta.toFixed(2)}s TO CATCH YOUR FRIEND. ONE MORE?`;
   }
   audio.play('finish');
-  $('result-time').textContent=formatSeconds(result);updateTimer(performance.now());showPhase();
+  updateTimer(performance.now());showPhase();
   resultSubmissionId=makeSubmissionId();
   nicknameEditing=false;nicknameSaving=false;leaderboardSyncing=false;
   $('result-nickname').value=leaderboard.hasNickname?leaderboard.nickname:'';

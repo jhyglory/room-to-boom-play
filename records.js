@@ -1,7 +1,7 @@
 import { TOTAL_FURNITURE } from './engine.js';
 
-// Portrait geometry and energy-gated local shortcuts define a new stage; older best keys remain intact.
-export const STAGE = 'studio-route16-v18';
+// Bounded post-fracture heavy carry defines a new ruleset; older best keys remain intact.
+export const STAGE = 'studio-breakthrough16-v19';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

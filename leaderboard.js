@@ -1,4 +1,4 @@
-import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.18.0';
+import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.19.0';
 
 const PLAYER_KEY = 'room-to-boom:player-id';
 const NAME_KEY = 'room-to-boom:nickname';
@@ -168,15 +168,14 @@ function avatarHTML(entry){
     ? '<img class="result-avatar" src="./assets/leaderboard/components/avatar_default.svg" alt="" aria-hidden="true" width="88" height="88">'
     : '<span class="result-avatar result-avatar-empty" aria-hidden="true">·</span>';
 }
-export function renderLeaderboardHTML(board,{currentSeconds=null}={}) {
+export function renderLeaderboardHTML(board) {
   const actual=board.top;
   if(!actual.length)return '<p class="result-empty">No records yet. Be the first to finish!</p>';
-  const selfNote=entry=>entry.isMe&&currentSeconds!==null&&currentSeconds!==entry.seconds?`<small class="result-run-note">This run ${currentSeconds.toFixed(2)}s</small>`:'';
   const first=actual.slice(0,3),order=first.length>=2?[1,0,...(first.length===3?[2]:[])]:[0];
   const podium=order.map(index=>{
     const entry=first[index],modifier=['first','second','third'][index];
-    return `<li class="result-podium-place result-podium-${modifier}${entry.isMe?' is-self':''}" data-player-id="${escapeHTML(entry.playerId)}"${entry.isMe?' aria-current="true"':''}><span class="result-podium-medal">${entry.rank}</span>${entry.tied?`<span class="result-tie-label">${rankLabel(entry)}</span>`:''}${avatarHTML(entry)}<strong class="result-player-name">${escapeHTML(entry.nickname)}${entry.isMe?'<small>You</small>':''}</strong><span class="result-player-time">${timeHTML(entry.seconds)}</span>${selfNote(entry)}</li>`;
+    return `<li class="result-podium-place result-podium-${modifier}${entry.isMe?' is-self':''}" data-player-id="${escapeHTML(entry.playerId)}"${entry.isMe?' aria-current="true"':''}><span class="result-podium-medal">${entry.rank}</span>${entry.tied?`<span class="result-tie-label">${rankLabel(entry)}</span>`:''}${avatarHTML(entry)}<strong class="result-player-name">${escapeHTML(entry.nickname)}${entry.isMe?'<small>You</small>':''}</strong><span class="result-player-time">${timeHTML(entry.seconds)}</span></li>`;
   }).join('');
-  const rows=actual.slice(3).map(entry=>`<div class="result-table-row${entry.isMe?' is-self':''}" role="row" data-player-id="${escapeHTML(entry.playerId)}"${entry.isMe?' aria-current="true"':''}><span class="result-rank-number" role="cell">${rankLabel(entry)}</span><span class="result-table-player" role="cell">${avatarHTML(entry)}<strong class="result-player-name">${escapeHTML(entry.nickname)}${entry.isMe?'<small>You</small>':''}</strong></span><span class="result-player-time" role="cell">${timeHTML(entry.seconds)}${selfNote(entry)}</span></div>`).join('');
+  const rows=actual.slice(3).map(entry=>`<div class="result-table-row${entry.isMe?' is-self':''}" role="row" data-player-id="${escapeHTML(entry.playerId)}"${entry.isMe?' aria-current="true"':''}><span class="result-rank-number" role="cell">${rankLabel(entry)}</span><span class="result-table-player" role="cell">${avatarHTML(entry)}<strong class="result-player-name">${escapeHTML(entry.nickname)}${entry.isMe?'<small>You</small>':''}</strong></span><span class="result-player-time" role="cell">${timeHTML(entry.seconds)}</span></div>`).join('');
   return `<ol class="result-podium" data-count="${first.length}" aria-label="Top ${first.length} players">${podium}</ol>${rows?`<div class="result-table" role="table" aria-label="More leaderboard records"><div class="result-table-head" role="row"><span role="columnheader">Rank</span><span role="columnheader">Player</span><span role="columnheader">Time</span></div><div class="result-table-rows" role="rowgroup" tabindex="0" aria-label="Leaderboard list">${rows}</div></div>`:''}`;
 }
