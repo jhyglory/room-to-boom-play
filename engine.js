@@ -279,23 +279,43 @@ export class MovingWorld {
     };
   }
 
-  grab(x, y) {
+  grab(x, y, { minTargetSize = 0, hitSlop = 12 } = {}) {
     const { Query, Vector, Body } = this.M;
     this.release();
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
     this.pointer = { x, y };
     const exact = Query.point(this.bodies, this.pointer);
-    // Small props receive an additional 12 world units of picking tolerance.
+    // Screen-space touch targets are converted by the caller to world units.
+    // Ordinary calls retain their historical 12-unit pick tolerance. These
+    // virtual targets never resize a collider or extend the launch anchor.
+    const minimum = Number.isFinite(minTargetSize) ? Math.max(0, minTargetSize) : 0;
+    const slop = Number.isFinite(hitSlop) ? Math.max(0, hitSlop) : 12;
     const candidates = exact.length ? exact : this.bodies.filter((body) => {
       const p = Vector.rotate(Vector.sub(this.pointer, body.position), -body.angle);
-      return Math.abs(p.x) <= body.game.w / 2 + 12 && Math.abs(p.y) <= body.game.h / 2 + 12;
+      return Math.abs(p.x) <= Math.max(body.game.w / 2 + slop, minimum / 2)
+        && Math.abs(p.y) <= Math.max(body.game.h / 2 + slop, minimum / 2);
     });
     if (!candidates.length) return null;
-    const body = candidates.slice().sort((a, b) => {
-      const da = Vector.magnitudeSquared(Vector.sub(this.pointer, a.position));
-      const db = Vector.magnitudeSquared(Vector.sub(this.pointer, b.position));
-      return da - db;
-    })[0];
+    const outlineDistance = body => {
+      let nearest = Infinity;
+      for (let i = 0; i < body.vertices.length; i++) {
+        const a = body.vertices[i], b = body.vertices[(i + 1) % body.vertices.length];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const length = dx * dx + dy * dy;
+        const t = length ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length)) : 0;
+        nearest = Math.min(nearest, (x - a.x - t * dx) ** 2 + (y - a.y - t * dy) ** 2);
+      }
+      return nearest;
+    };
+    // A real body hit always wins over a neighbor's expanded target. In gaps,
+    // choose the closest physical outline, then center, then stable body order.
+    const body = candidates.map((item, index) => ({ body: item, index,
+      outline: exact.length ? 0 : outlineDistance(item),
+      center: Vector.magnitudeSquared(Vector.sub(this.pointer, item.position)),
+    })).sort((a, b) => {
+      const edge = a.outline - b.outline, center = a.center - b.center;
+      return Math.abs(edge) > 1e-9 ? edge : Math.abs(center) > 1e-9 ? center : a.index - b.index;
+    })[0].body;
     this._breakthrough.delete(body);
     const local = Vector.rotate(Vector.sub(this.pointer, body.position), -body.angle);
     // Keep the grab anchor inside the physical body even for an expanded hit.

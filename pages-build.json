@@ -1,5 +1,5 @@
 {
-  "version": "0.19.1",
+  "version": "0.20.0",
   "mode": "device",
   "files": [
     "app.js",
@@ -50,6 +50,7 @@
     "assets/v2/furniture/wardrobe_cream.png",
     "assets/v2/furniture/washing_machine_cream.png",
     "audio.js",
+    "camera.js",
     "clock.js",
     "engine.js",
     "fonts/Fredoka-OFL.txt",
@@ -68,7 +69,7 @@
     "vendor/MATTER-LICENSE.txt",
     "vendor/matter.min.js"
   ],
-  "runtimeBytes": 32722642,
+  "runtimeBytes": 32730734,
   "excluded": [
     "data",
     "server.py",

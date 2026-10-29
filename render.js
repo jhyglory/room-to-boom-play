@@ -1,4 +1,5 @@
-import { WORLD } from './engine.js?v=0.18.0';
+import { WORLD } from './engine.js?v=0.20.0';
+import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.20.0';
 import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.18.0';
 
 const WIDTH = WORLD.width;
@@ -94,6 +95,14 @@ export class GameRenderer {
 
   resize() {
     const b = this.canvas.getBoundingClientRect();
+    const compact = window.matchMedia?.('(max-width: 739px)').matches === true;
+    if (this.cameraBodies !== this.world.bodies || this.compact !== compact) {
+      this.cameraBodies = this.world.bodies;
+      this.view = compact ? { ...DEFAULT_VIEW } : { minX: 0, minY: 0, maxX: WIDTH, maxY: HEIGHT };
+    }
+    this.compact = compact;
+    this.canvas.parentElement?.style?.setProperty?.('--world-view-ratio', String(compact
+      ? (DEFAULT_VIEW.maxX - DEFAULT_VIEW.minX) / (DEFAULT_VIEW.maxY - DEFAULT_VIEW.minY) : WIDTH / HEIGHT));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(1, Math.round(b.width * dpr));
     const h = Math.max(1, Math.round(b.height * dpr));
@@ -101,17 +110,34 @@ export class GameRenderer {
       this.canvas.width = w;
       this.canvas.height = h;
     }
-    this.scale = Math.min(w / WIDTH, h / HEIGHT);
-    this.offsetX = (w - WIDTH * this.scale) / 2;
-    this.offsetY = (h - HEIGHT * this.scale) / 2;
+    Object.assign(this, projection(this.view, w, h));
+    this.cssScale = this.scale * b.width / w;
     this.bounds = b;
   }
 
-  screenToWorld(clientX, clientY) {
+  screenTransform() {
     const b = this.canvas.getBoundingClientRect();
-    const px = (clientX - b.left) * this.canvas.width / b.width;
-    const py = (clientY - b.top) * this.canvas.height / b.height;
-    return { x: (px - this.offsetX) / this.scale, y: (py - this.offsetY) / this.scale };
+    return { left: b.left, top: b.top, width: b.width, height: b.height,
+      pixelWidth: this.canvas.width, pixelHeight: this.canvas.height,
+      scale: this.scale, offsetX: this.offsetX, offsetY: this.offsetY };
+  }
+
+  screenToWorld(clientX, clientY, transform = this.screenTransform()) {
+    const px = (clientX - transform.left) * transform.pixelWidth / transform.width;
+    const py = (clientY - transform.top) * transform.pixelHeight / transform.height;
+    return { x: (px - transform.offsetX) / transform.scale, y: (py - transform.offsetY) / transform.scale };
+  }
+
+  updateCamera() {
+    if (!this.compact) return;
+    const reset = this.cameraBodies !== this.world.bodies;
+    if (reset) { this.cameraBodies = this.world.bodies; this.view = { ...DEFAULT_VIEW }; }
+    const next = expandedCameraView(this.view, this.world.bodies || []);
+    if (!reset && next.minX === this.view.minX && next.maxX === this.view.maxX
+      && next.minY === this.view.minY && next.maxY === this.view.maxY) return;
+    this.view = next;
+    Object.assign(this, projection(this.view, this.canvas.width, this.canvas.height));
+    this.cssScale = this.scale * this.bounds.width / this.canvas.width;
   }
 
   getAsset(id) { return (this.assets || defaultAssets).get(id); }
@@ -258,7 +284,11 @@ export class GameRenderer {
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     const shake = this.shake;
     const held = this.world.grabbed || this.world.dragged;
-    const amplitude = shake && !held ? (shake.amplitude ?? 4.5 * shake.intensity) * shake.life / shake.maxLife : 0;
+    this.updateCamera();
+    // Tight mobile framing keeps intact plaster edges visible. Local impact
+    // animation and audio remain; the world itself never moves for this effect.
+    const amplitude = shake && !held ? Math.min(this.compact ? .75 : Infinity,
+      (shake.amplitude ?? 4.5 * shake.intensity) * shake.life / shake.maxLife) : 0;
     const shakePhase = shake ? shake.seed + (shake.maxLife - shake.life) * 105 : 0;
     const recoil = shake?.direction || { x: 1, y: .65 };
     const pulse = Math.sin(shakePhase), cross = Math.cos(shakePhase * 1.2) * .2;
@@ -625,9 +655,10 @@ export class GameRenderer {
       stroke(ctx, points, '#b9ffda', 7);
       ctx.restore();
     }
-    const meterX = Math.max(55, Math.min(WIDTH - 55, end.x));
+    const view = this.view || { minX: 0, minY: 0, maxX: WIDTH, maxY: HEIGHT };
+    const meterX = Math.max(view.minX + 55, Math.min(view.maxX - 55, end.x));
     const offset = power > .02 ? (end.y >= center.y ? -30 : 30) : (body.game?.h || 50) / 2 + 22;
-    const meterY = Math.max(26, Math.min(HEIGHT - 38, end.y + offset));
+    const meterY = Math.max(view.minY + 26, Math.min(view.maxY - 38, end.y + offset));
     rounded(ctx, meterX - 37, meterY - 8, 74, 16, 6, '#34634d', '#e6ffe8', 1.5);
     rounded(ctx, meterX - 33, meterY - 4, Math.max(2, 66 * power), 8, 3,
       gradient(ctx, meterX - 33, meterY - 4, 0, 8, power > .8 ? ['#ecffc1', '#8fd594'] : ['#c0f5cd', '#76b88b']));

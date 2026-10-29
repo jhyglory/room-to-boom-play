@@ -1,5 +1,5 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.19.0';
-import { GameRenderer } from './render.js?v=0.19.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.20.0';
+import { GameRenderer } from './render.js?v=0.20.0';
 import { RunClock, formatSeconds } from './clock.js';
 import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.19.0';
 import { GameAudio } from './audio.js?v=0.18.1';
@@ -55,6 +55,8 @@ const challenge = parseChallenge(pageUrl);
 let resultSeconds = null;
 let runVersion = 0;
 let pointerId = null;
+let pointerTransform = null;
+let controlsAreDesktop = null;
 let lastFrame = performance.now();
 let accumulator = 0;
 let physicsNow = null;
@@ -152,6 +154,7 @@ function updateDeliveryHint(now){
 function isRankingScreen(){return phase==='complete'||phase==='rankings';}
 function showPhase(){
   document.body.setAttribute('data-phase',phase);
+  syncSettingsLayout();
   if(phase!=='playing'&&!window.matchMedia('(min-width: 740px)').matches)$('game-settings').open=false;
   $('start-overlay').classList.toggle('hidden',phase!=='menu');
   $('pause-overlay').classList.toggle('hidden',phase!=='paused');
@@ -172,7 +175,7 @@ function release(){
   world.release();
   canvas.classList.remove('dragging');
   const captured=pointerId;
-  pointerId=null;
+  pointerId=null;pointerTransform=null;
   if(captured!==null){
     try{if(canvas.hasPointerCapture(captured))canvas.releasePointerCapture(captured);}catch{}
   }
@@ -401,13 +404,16 @@ canvas.addEventListener('pointerdown',event=>{
   if(phase!=='playing'||pointerId!==null||(event.pointerType==='mouse'&&event.button!==0))return;
   advanceSimulation(performance.now());
   if(phase!=='playing')return;
-  const point=renderer.screenToWorld(event.clientX,event.clientY);
-  const body=world.grab(point.x,point.y);
+  renderer.resize();
+  const transform=renderer.screenTransform();
+  const point=renderer.screenToWorld(event.clientX,event.clientY,transform);
+  const touch=event.pointerType==='touch'||event.pointerType==='pen';
+  const body=world.grab(point.x,point.y,touch?{minTargetSize:48/renderer.cssScale,hitSlop:0}:undefined);
   if(body&&!window.matchMedia('(min-width: 740px)').matches)$('game-settings').open=false;
   if(!body)return;
   lastItemId=body.game.id;
   activateSound('grab');
-  event.preventDefault();pointerId=event.pointerId;
+  event.preventDefault();pointerId=event.pointerId;pointerTransform=transform;
   try{canvas.setPointerCapture(pointerId);}catch(error){if(!completionQA)throw error;}
   canvas.classList.add('dragging');clock.start(performance.now());
   hintUntil=performance.now()+700;
@@ -418,7 +424,7 @@ canvas.addEventListener('pointerdown',event=>{
 });
 canvas.addEventListener('pointermove',event=>{
   if(event.pointerId!==pointerId||phase!=='playing')return;
-  event.preventDefault();const point=renderer.screenToWorld(event.clientX,event.clientY);
+  event.preventDefault();const point=renderer.screenToWorld(event.clientX,event.clientY,pointerTransform);
   world.movePointer(point.x,point.y);
 });
 canvas.addEventListener('pointerup',event=>{
@@ -426,7 +432,7 @@ canvas.addEventListener('pointerup',event=>{
   advanceSimulation(performance.now());
   if(event.pointerId!==pointerId||phase!=='playing')return;
   event.preventDefault();
-  const point=renderer.screenToWorld(event.clientX,event.clientY);
+  const point=renderer.screenToWorld(event.clientX,event.clientY,pointerTransform);
   world.movePointer(point.x,point.y);
   const launchedBody=world.grabbed;
   const launched=world.launch();
@@ -503,7 +509,13 @@ window.addEventListener('keydown',event=>{
   }
 });
 const resizeObserver=new ResizeObserver(()=>renderer.resize());resizeObserver.observe(canvas);
-function syncSettingsLayout(){if(window.matchMedia('(min-width: 740px)').matches)$('game-settings').open=true;else $('game-settings').open=false;}
+function syncSettingsLayout(){
+  const desktop=window.matchMedia('(min-width: 740px)').matches;
+  const toolbar=$('board-toolbar'),slot=$(desktop?'desktop-controls-slot':'pause-controls-slot');
+  if(toolbar.parentNode!==slot)slot.appendChild(toolbar);
+  if(desktop||controlsAreDesktop!==desktop||phase==='playing'||phase==='menu')$('game-settings').open=desktop;
+  controlsAreDesktop=desktop;
+}
 window.addEventListener('resize',()=>{renderer.resize();syncSettingsLayout();});
 syncSettingsLayout();
 $('motion').setAttribute('aria-pressed',String(reducedMotion));
@@ -519,7 +531,9 @@ const completionQA=(()=>{try{const url=new URL(window.location.href);return ['12
 if(completionQA)canvas.addEventListener('room-to-boom:inspect',event=>{
   if(!event.detail||typeof event.detail!=='object')return;
   const activeBodies=new Set(world.M.Composite.allBodies(world.engine.world));
-  event.detail.snapshot={phase,moved:world.moved,resultSeconds,world:JSON.parse(JSON.stringify(WORLD)),impacts:diagnosticImpacts.map(event=>({...event,point:event.point?{...event.point}:null})),maxPull:PHYSICS.maxPull,
+  event.detail.snapshot={phase,moved:world.moved,resultSeconds,world:JSON.parse(JSON.stringify(WORLD)),camera:{...renderer.view},transform:renderer.screenTransform(),cssScale:renderer.cssScale,
+    grabbed:world.grabbed?.game.id??null,aim:world.aim?JSON.parse(JSON.stringify(world.aim)):null,
+    impacts:diagnosticImpacts.map(event=>({...event,point:event.point?{...event.point}:null})),maxPull:PHYSICS.maxPull,
     bodies:world.bodies.map(body=>({id:body.game.id,position:{...body.position},velocity:{...world.M.Body.getVelocity(body)},mass:body.mass,restitution:body.restitution,angle:body.angle,angularVelocity:world.M.Body.getAngularVelocity(body),vertices:body.vertices.map(({x,y})=>({x,y})),w:body.game.w,h:body.game.h,
       maxLaunchSpeed:body.game.maxLaunchSpeed,minimumLaunchSpeed:body.game.minimumLaunchSpeed,
       frictionAir:body.frictionAir,floorDamping:body.game.floorDamping,delivered:body.game.delivered})),
