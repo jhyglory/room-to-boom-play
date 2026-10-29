@@ -1,4 +1,4 @@
-// Gesture-unlocked, authored material percussion and ricochet POPs for v17.
+// Gesture-unlocked material percussion and staccato wall POPs for v18.1.
 // Fabric, wood, metal, cardboard and ceramic differ in resonance and decay;
 // small deterministic pitch cycles keep repeated hits tactile without raising
 // the master mix. No recorded audio or background music is used.
@@ -62,6 +62,7 @@ export class GameAudio {
     this.contacts = [];
     this.variants = new Map();
     this.collapses = [];
+    this.wallCadence = new Map();
     this.noiseBuffer = null;
   }
 
@@ -216,6 +217,34 @@ export class GameAudio {
       try { voice.oscillator.disconnect(); voice.gain.disconnect(); voice.filter?.disconnect(); } catch {}
     }
     this.voices.clear();
+    this.contacts = [];
+    this.collapses = [];
+    this.wallCadence.clear();
+  }
+
+  reserveWallVoices(count) {
+    // A fresh physical hit takes priority over an old scheduled flourish.
+    // Keep the same strict voice bound instead of losing the whole new hit.
+    const now = this.context.currentTime;
+    const retiring = [...this.voices].sort((a,b) => {
+      const af = a.start > now, bf = b.start > now;
+      if (af !== bf) return af ? -1 : 1;
+      return af ? b.start - a.start : a.end - b.end;
+    });
+    while (this.voices.size + count > AUDIO_LEVELS.maxVoices && retiring.length) {
+      const voice = retiring.shift();
+      try { voice.oscillator.stop(now); } catch {}
+      try { voice.oscillator.disconnect(); voice.gain.disconnect(); voice.filter?.disconnect(); } catch {}
+      this.voices.delete(voice);
+    }
+  }
+
+  nextWallCadence(key, now) {
+    for (const [id, hit] of this.wallCadence) if (now - hit.at > .4) this.wallCadence.delete(id);
+    const previous = key == null ? null : this.wallCadence.get(key);
+    const count = previous ? Math.min(3,previous.count + 1) : 1;
+    if (key != null) this.wallCadence.set(key,{at:now,count});
+    return count;
   }
 
   suspend() {
@@ -257,7 +286,7 @@ export class GameAudio {
     const start = context.currentTime + delay;
     const oscillator = context.createOscillator();
     const gain = context.createGain();
-    const voice = { oscillator, gain };
+    const voice = { oscillator, gain, start, end: start + duration + .05 };
     this.voices.add(voice);
     oscillator.onended = () => {
       this.voices.delete(voice);
@@ -290,13 +319,13 @@ export class GameAudio {
     if (oscillator.playbackRate) oscillator.playbackRate.value = 1;
     const gain = context.createGain();
     const filter = context.createBiquadFilter();
-    const voice = { oscillator, gain, filter };
+    const start = context.currentTime + delay;
+    const voice = { oscillator, gain, filter, start, end: start + duration + .05 };
     this.voices.add(voice);
     oscillator.onended = () => {
       this.voices.delete(voice);
       try { oscillator.disconnect(); gain.disconnect(); filter.disconnect(); } catch {}
     };
-    const start = context.currentTime + delay;
     filter.type = filterType;
     filter.frequency.setValueAtTime(frequency, start);
     if (toFrequency) filter.frequency.exponentialRampToValueAtTime(toFrequency, start + duration);
@@ -381,7 +410,7 @@ export class GameAudio {
     if (this.voices.size >= AUDIO_LEVELS.maxVoices) return;
     const context = this.context, start = context.currentTime + delay;
     const oscillator = context.createOscillator(), gain = context.createGain();
-    const voice = { oscillator, gain };
+    const voice = { oscillator, gain, start, end: start + duration + .02 };
     this.voices.add(voice);
     oscillator.onended = () => {
       this.voices.delete(voice);
@@ -402,7 +431,36 @@ export class GameAudio {
     oscillator.start(start); oscillator.stop(start + duration + .02);
   }
 
-  wallPop(k, weight, variant, material, { damaged=false, firstCrack=false } = {}) {
+  wallFlurry(k, weight, variant, { damaged=false, firstCrack=false, cadence=1 } = {}) {
+    const beats = firstCrack || k >= .65 || (cadence >= 3 && k >= .3) ? 2
+      : damaged || k >= .3 || (cadence >= 2 && k >= .15) ? 1 : 0;
+    if (!beats || this.voices.size >= AUDIO_LEVELS.maxVoices) return;
+    // One source, separate envelopes: audible ta-ta / pa-pa-PANG attacks,
+    // rather than several near-simultaneous layers heard as one thud.
+    const context=this.context, now=context.currentTime;
+    const oscillator=context.createOscillator(),gain=context.createGain();
+    const delays=beats===2?[.050,.112]:[.050];
+    const end=now+delays.at(-1)+.052;
+    const voice={oscillator,gain,start:now+delays[0],end,wallFlurry:true};
+    this.voices.add(voice);
+    oscillator.type='triangle';
+    gain.gain.setValueAtTime(.0001,now);
+    const p=variant.pitch*(1.16-weight*.30)*(1+(cadence-1)*.035);
+    for(let i=0;i<delays.length;i++){
+      const start=now+delays[i],duration=i===1?.038:.028;
+      const level=(i===1?.20:.14)*(.55+k*.45)*AUDIO_LEVELS.cueGain.collision;
+      oscillator.frequency.setValueAtTime((i===1?560:790)*p,start);
+      oscillator.frequency.exponentialRampToValueAtTime((i===1?118:245)*p,start+duration);
+      gain.gain.setValueAtTime(.0001,start);
+      gain.gain.linearRampToValueAtTime(level,start+.0008);
+      gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+    }
+    oscillator.onended=()=>{this.voices.delete(voice);try{oscillator.disconnect();gain.disconnect();}catch{}};
+    oscillator.connect(gain);gain.connect(this.master);
+    oscillator.start(voice.start);oscillator.stop(end);
+  }
+
+  wallPop(k, weight, variant, material, { damaged=false, firstCrack=false, broken=false, cadence=1 } = {}) {
     const loud = (.46 + k * .54) * AUDIO_LEVELS.cueGain.collision;
     const p = variant.pitch * (1.15 - weight * .30);
     // The sharp falling pitch and small rebound carry the "POP". A compact
@@ -415,6 +473,7 @@ export class GameAudio {
     if(firstCrack)this.crackTail(k,variant);
     else if(damaged)this.popTone(1350*p,510*p,.024,.075*loud,{delay:.012,type:'triangle'});
     else this.materialAccent(material,variant,.14+k*.10);
+    if(!broken)this.wallFlurry(k,weight,variant,{damaged,firstCrack,cadence});
   }
 
   reboundPop(k,weight,variant,material) {
@@ -438,19 +497,19 @@ export class GameAudio {
   collapseTail(variant) {
     const mix = AUDIO_LEVELS.cueGain.collision;
     this.popTone(385*variant.pitch,91,.080,.21*mix,{bounce:true});
-    this.popTone(620*variant.pitch,165,.047,.105*mix,{delay:.027,type:'triangle'});
-    this.popTone(275*variant.pitch,78,.058,.13*mix,{delay:.055,bounce:true});
+    this.popTone(620*variant.pitch,165,.032,.14*mix,{delay:.060,type:'triangle'});
+    this.popTone(275*variant.pitch,78,.050,.23*mix,{delay:.126,bounce:true});
     this.noiseHit(.052,820*variant.brightness,.18*mix,1.2,
       {delay:.006,toFrequency:1850,attack:.0008});
     this.noiseHit(.023,2300*variant.brightness,.09*mix,1.1,
-      {delay:.072,filterType:'highpass',attack:.0008});
+      {delay:.132,filterType:'highpass',attack:.0008});
   }
 
   collision(speed, metadata = {}) {
     const { broken=false, point=null, sourceId=null, bodyId=null, wall=false, otherMaterial, damaged=false, firstCrack=false } = metadata || {};
     if (this.muted || this.paused || this.context?.state !== 'running' || !Number.isFinite(speed) || speed < 0) return false;
-    if (this.voices.size >= AUDIO_LEVELS.maxVoices) return false;
-    const before=this.voices.size,now=this.context.currentTime;
+    if (!wall && !broken && this.voices.size >= AUDIO_LEVELS.maxVoices) return false;
+    const now=this.context.currentTime;
     const isWall = Boolean(wall || broken);
     const profile=this.materialContext(metadata || {});
     try {
@@ -464,10 +523,24 @@ export class GameAudio {
         // ricochet a few frames later must not inherit a global 55ms mute.
         return nearby&&((isWall&&hit.wall&&age<.012)||((sourceId==null||hit.sourceId==null)&&age<.025));
       });
-      if(speed>1.3&&!duplicate){
+      this.collapses=this.collapses.filter(hit=>now-hit.at<.07);
+      const duplicateCollapse=broken&&this.collapses.some(hit=>{
+        if(bodyId!=null&&hit.bodyId!=null&&bodyId!==hit.bodyId)return false;
+        const same=sourceId!=null&&hit.sourceId!=null&&sourceId===hit.sourceId;
+        const nearby=!point||!hit.point||Math.hypot(point.x-hit.point.x,point.y-hit.point.y)<=110;
+        return same||nearby;
+      });
+      const contact=speed>1.3&&!duplicate,collapse=broken&&!duplicateCollapse;
+      if(isWall&&(contact||collapse))this.reserveWallVoices((contact?(firstCrack?8:6):0)+(collapse?5:0));
+      const before=this.voices.size;
+      if(contact){
         this.contacts.push({at:now,point:point?{...point}:null,sourceId,bodyId,wall:isWall});
         const k=clamp((speed-1.3)/8,0,1),variant=this.nextVariant(profile.material,profile.kind);
-        if (isWall) this.wallPop(k,profile.weight,variant,profile.material,{damaged,firstCrack});
+        if (isWall) {
+          const cadence=this.nextWallCadence(bodyId??sourceId,now);
+          const wallVariant={...variant,pitch:variant.pitch*(1+(cadence-1)*.035)};
+          this.wallPop(k,profile.weight,wallVariant,profile.material,{damaged,firstCrack,broken,cadence});
+        }
         else {
           this.materialHit(profile.material,k,profile.weight,variant);
           this.reboundPop(k,profile.weight,variant,profile.material);
@@ -475,18 +548,9 @@ export class GameAudio {
           if(other&&other!==profile.material)this.materialAccent(other,variant,.55+k*.3);
         }
       }
-      if(broken){
-        this.collapses=this.collapses.filter(hit=>now-hit.at<.07);
-        const duplicateCollapse=this.collapses.some(hit=>{
-          if(bodyId!=null&&hit.bodyId!=null&&bodyId!==hit.bodyId)return false;
-          const same=sourceId!=null&&hit.sourceId!=null&&sourceId===hit.sourceId;
-          const nearby=!point||!hit.point||Math.hypot(point.x-hit.point.x,point.y-hit.point.y)<=110;
-          return same||nearby;
-        });
-        if(!duplicateCollapse){
+      if(collapse){
           this.collapses.push({at:now,point:point?{...point}:null,sourceId,bodyId});
           this.collapseTail(this.nextVariant('plaster','collapse'));
-        }
       }
       return this.voices.size>before;
     }catch(error){return this.failPlayback(error);}
