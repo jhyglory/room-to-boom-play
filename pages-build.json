@@ -1,5 +1,5 @@
 {
-  "version": "0.19.0",
+  "version": "0.19.1",
   "mode": "device",
   "files": [
     "app.js",
@@ -25,6 +25,7 @@
     "assets/leaderboard/frames/result-shell.svg",
     "assets/leaderboard/logo/room-to-boom-logo.png",
     "assets/leaderboard/result-title-en.png",
+    "assets/social/room-to-boom-sofa-breakthrough-v1.png",
     "assets/v2/environment/floor_mint.png",
     "assets/v2/environment/floor_wood.png",
     "assets/v2/environment/room_frame.png",
@@ -67,7 +68,7 @@
     "vendor/MATTER-LICENSE.txt",
     "vendor/matter.min.js"
   ],
-  "runtimeBytes": 30383921,
+  "runtimeBytes": 32722642,
   "excluded": [
     "data",
     "server.py",
