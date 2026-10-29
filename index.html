@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF4E7">
+  <meta name="description" content="Pull back, release and move 16 pieces upstairs. A miniature moving game with weighty plaster walls and time-only records.">
+  <title>Room to Boom! — Moving day</title>
+  <link rel="preload" href="./fonts/fredoka-bold-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./fonts/nunito-latin-variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./style.css?v=0.17.1-english1">
+  <link rel="preload" href="./assets/leaderboard/result-title-en.png" as="image">
+  <link rel="stylesheet" href="./result.css?v=0.17.1-english1">
+</head>
+<body>
+  <main class="playground" data-build="0.17.1">
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Room to Boom home"><img src="./assets/brand/room-to-boom-golden-toy.png" width="2172" height="724" alt="Room to Boom!" decoding="async" fetchpriority="high" draggable="false"></a>
+      <div class="stage-line"><span class="stage-kicker">STUDIO SLINGSHOT</span><span class="difficulty-label" title="16 close-packed pieces · light pieces coast farther · heavy pieces resist">TIGHT · 16</span><span class="stage-badge">STAGE 01</span></div>
+    </header>
+    <section class="game-shell" aria-label="Moving game">
+      <div class="game-hud">
+        <div class="stat-card time-stat"><span class="stat-label">YOUR TIME</span><strong id="timer" aria-label="Elapsed time">00<span class="time-small">.00</span><span class="time-unit">s</span></strong></div>
+        <div class="stat-card move-stat"><span class="stat-label">MOVED IN</span><div class="move-line"><strong><span id="moved">0</span><span class="stat-total"> / 16</span></strong><div class="progress-track sr-only"><div id="progress"></div></div></div></div>
+        <button id="pause" class="pause-button" aria-label="Pause game" title="Pause game" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4v17M17.5 4v17"/></svg></button>
+      </div>
+      <div class="record-stack"><div class="best-strip"><span>PERSONAL BEST</span><strong id="best-time">—</strong></div><div id="challenge-badge" class="challenge-badge" hidden>FRIEND’S TIME <strong id="challenge-time"></strong></div></div>
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="game" width="760" height="920" role="img" aria-label="Move all 16 furniture pieces from OLD HOME below to NEW HOME above. Hold a piece, pull down to launch up, then release. Plaster walls resist light touches, crack under solid impacts and break under enough force. Keep the whole piece inside the mint room and still for half a second."></canvas>
+        <div class="overlay" id="start-overlay">
+          <div class="start-card">
+            <span class="card-eyebrow">IT’S MOVING DAY</span>
+            <h1>A little pull. <span>A big move.</span></h1>
+            <p>Grab → pull back → release to launch the other way.<br>Bring all <strong>16 pieces</strong> home. Let each settle inside.</p>
+            <div class="start-actions"><button id="play" class="primary-button">LET’S MOVE <span aria-hidden="true">↗</span></button><button id="view-rankings" class="secondary-button" type="button">RANKINGS</button></div>
+            <span class="card-footnote">FIRST GRAB STARTS THE CLOCK</span>
+          </div>
+        </div>
+        <div class="overlay hidden" id="pause-overlay">
+          <div class="modal-card"><span class="card-eyebrow">TAKE A BREATHER</span><h2>Moving can wait.</h2><p>Your furniture and timer are paused.</p><button id="resume" class="primary-button">KEEP MOVING <span aria-hidden="true">→</span></button></div>
+        </div>
+        <div class="board-hint" id="board-hint">PULL DOWN · LAUNCH UP</div>
+      </div>
+      <div class="board-toolbar">
+        <div class="instruction-card"><span class="instruction-icon" aria-hidden="true"><svg viewBox="0 0 34 34"><path d="M17 27V7M11 13l6-6 6 6"/></svg></span><div class="instruction-copy"><strong>PULL BACK. LET IT FLY.</strong><span id="live-hint" class="live-hint">Launch opposite to your pull. Time is the only score.</span></div></div>
+        <div class="toolbar-actions">
+          <button id="retry" class="restart-button" aria-label="Restart level">RESTART</button>
+          <button id="sound" class="sound-button" aria-pressed="true" aria-label="Mute sound"><svg viewBox="0 0 26 26" aria-hidden="true"><path class="sound-speaker" d="M3 9h4l6-5v18l-6-5H3Z"/><path class="sound-waves" d="M18 7q7 6 0 12"/></svg><span id="sound-label">SOUND</span></button>
+          <button id="motion" class="motion-button" aria-pressed="false" title="Reduce visual effects">LESS MOTION</button>
+        </div>
+      </div>
+      <ul id="checklist" class="sr-only" aria-label="Moving checklist"><li data-item="sofa">Sofa</li><li data-item="bed">Bed</li><li data-item="fridge">Fridge</li><li data-item="bookcase">Bookcase</li><li data-item="table">Table</li><li data-item="chair">Chair</li><li data-item="boxA">Box no. 1</li><li data-item="boxB">Box no. 2</li><li data-item="lamp">Floor lamp</li><li data-item="plant">Plant</li><li data-item="armchair">Armchair</li><li data-item="wardrobe">Wardrobe</li><li data-item="dresser">Dresser</li><li data-item="tv_stand">TV stand</li><li data-item="desk">Desk</li><li data-item="washing_machine">Washing machine</li></ul>
+    </section>
+  </main>
+<div class="overlay result-view hidden" id="result-overlay" lang="en" role="dialog" aria-modal="true" aria-labelledby="result-title" tabindex="-1">
+  <div class="result-screen">
+    <header class="result-masthead">
+      <a class="result-logo" href="./" aria-label="Room to Boom main menu"><img src="./assets/leaderboard/logo/room-to-boom-logo.png" width="2307" height="817" alt="Room to Boom!" draggable="false"></a>
+      <span class="result-stage">STAGE <strong>01</strong></span>
+    </header>
+    <section class="result-panel" aria-label="Results and rankings">
+      <span class="result-frame-lights" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <div class="result-panel-head">
+        <span class="result-new-best" id="result-badge" hidden>NEW BEST!</span>
+        <div class="result-heading-wrap"><h2 class="result-title" id="result-title"><img class="result-title-art" src="./assets/leaderboard/result-title-en.png" width="2172" height="724" alt="Move complete!" decoding="async" draggable="false"></h2></div>
+        <h2 class="rankings-title" id="rankings-title">RANKINGS</h2>
+        <p class="sr-only" id="result-best">Checking your record.</p>
+        <p class="result-challenge-note" id="challenge-result" hidden></p>
+        <p class="result-load-state" id="result-load-state" role="status" aria-live="polite"></p>
+      </div>
+      <section class="result-ranking" aria-labelledby="result-ranking-title">
+        <div class="result-ranking-heading"><h3 id="result-ranking-title">Rankings</h3><p><span id="result-scope">This browser</span> <strong id="result-total">0 players</strong></p></div>
+        <div class="result-board" id="result-board" data-count="0" aria-label="Saved ranking records"><p class="result-empty">Loading rankings…</p></div>
+      </section>
+      <footer class="result-panel-footer">
+        <div class="result-identity-bar">
+          <div class="result-name-display" id="result-name-display"><strong id="result-player-name">Player</strong><button id="result-name-edit" type="button">Edit name</button></div>
+          <div class="result-self-record" aria-label="My rank and best time"><div><span aria-label="My rank" data-short-label="Rank">My rank</span><strong id="result-my-rank">—</strong></div><div><span aria-label="Best time" data-short-label="Best">Best</span><strong id="result-my-time">—</strong></div></div>
+        </div>
+        <form class="result-nickname-form" id="result-nickname-form" hidden><label for="result-nickname">Name</label><input id="result-nickname" type="text" maxlength="16" autocomplete="nickname" placeholder="Enter your name"><button id="result-name-save" type="submit">Save</button><button id="result-name-cancel" type="button">Cancel</button></form>
+        <p id="result-name-status" class="result-name-status" role="status" aria-live="polite"></p>
+        <div class="result-current-record"><span>This run</span><strong id="result-current-time"><span id="result-time">00.00</span><small>s</small></strong></div>
+        <div class="result-actions">
+          <button id="retry-result" type="button" aria-label="Try again"><span class="result-button-art" aria-hidden="true"><img src="./assets/leaderboard/components/button-retry-en.png" width="2172" height="724" alt="" draggable="false"></span></button>
+          <button id="share-result" type="button" aria-label="Share"><span class="result-button-art" aria-hidden="true"><img src="./assets/leaderboard/components/button-share-en.png" width="1908" height="824" alt="" draggable="false"></span></button>
+          <button id="result-main" type="button" aria-label="Main menu" hidden><span class="result-button-art" aria-hidden="true"><img src="./assets/leaderboard/components/button-home-en.png" width="1821" height="864" alt="" draggable="false"></span></button>
+        </div>
+        <div class="result-footer-secondary"><p id="result-sync-state" class="sr-only" role="status" aria-live="polite"></p><div class="result-share"><div class="result-share-content"><p id="share-status" role="status" aria-live="polite"></p><label id="manual-share" class="manual-share" hidden>Copy challenge link<input id="share-url" type="text" readonly aria-label="Challenge link"></label></div></div></div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+  <dialog id="restart-dialog"><form method="dialog"><span class="card-eyebrow">A FRESH START?</span><h2>Another moving day.</h2><p>This run will reset to the original layout.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">Keep this run</button><button value="restart" class="primary-button">Start over ↻</button></div></form></dialog>
+  <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
+  <script src="./vendor/matter.min.js"></script>
+  <script type="module" src="./app.js?v=0.17.1"></script>
+</body>
+</html>

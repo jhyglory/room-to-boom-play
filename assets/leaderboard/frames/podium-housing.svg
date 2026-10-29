@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 350" width="700" height="350" role="img" aria-label="Blank high-score podium housing">
+  <defs>
+    <linearGradient id="case" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#204b78"/>
+      <stop offset=".17" stop-color="#0d2a4b"/>
+      <stop offset=".85" stop-color="#082039"/>
+      <stop offset="1" stop-color="#06172b"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#081e38"/>
+      <stop offset=".5" stop-color="#0a2945"/>
+      <stop offset="1" stop-color="#153f65"/>
+    </linearGradient>
+    <radialGradient id="lamp" cx=".35" cy=".28">
+      <stop offset="0" stop-color="#fff5a3"/>
+      <stop offset=".4" stop-color="#ffd24a"/>
+      <stop offset="1" stop-color="#f07913"/>
+    </radialGradient>
+    <filter id="shade"><feGaussianBlur stdDeviation="5"/></filter>
+  </defs>
+  <rect x="8" y="13" width="684" height="329" rx="40" fill="#041325" opacity=".27" filter="url(#shade)"/>
+  <rect x="3" y="3" width="694" height="339" rx="40" fill="url(#case)" stroke="#05182e" stroke-width="5"/>
+  <path d="M42 17h616M18 66v212M682 66v212" stroke="#6695c4" stroke-width="3" opacity=".35" fill="none" stroke-linecap="round"/>
+  <rect x="23" y="62" width="654" height="264" rx="25" fill="url(#screen)" stroke="#07172c" stroke-width="3"/>
+  <rect x="30" y="70" width="640" height="248" rx="19" fill="none" stroke="#2e658b" stroke-width="2" opacity=".5"/>
+  <path d="M56 53h588" stroke="#a3c6e5" stroke-width="3" opacity=".19" stroke-linecap="round"/>
+  <path d="M46 335h608" stroke="#06182c" stroke-width="5" opacity=".55" stroke-linecap="round"/>
+  <!-- Header remains blank for dynamic ranking label and population. -->
+  <g>
+    <circle cx="37" cy="35" r="10" fill="#051a2d" stroke="#49769b" stroke-width="2"/>
+    <circle cx="37" cy="35" r="6.5" fill="url(#lamp)"/>
+    <circle cx="663" cy="35" r="10" fill="#051a2d" stroke="#49769b" stroke-width="2"/>
+    <circle cx="663" cy="35" r="6.5" fill="url(#lamp)"/>
+    <rect x="10" y="140" width="8" height="29" rx="4" fill="#ffb52f" opacity=".9"/>
+    <rect x="682" y="140" width="8" height="29" rx="4" fill="#ffb52f" opacity=".9"/>
+    <rect x="10" y="181" width="8" height="29" rx="4" fill="#ffb52f" opacity=".9"/>
+    <rect x="682" y="181" width="8" height="29" rx="4" fill="#ffb52f" opacity=".9"/>
+  </g>
+  <g fill="#ffaf34" opacity=".73">
+    <path d="M28 292h8v8h-8zm8 8h8v8h-8zm628-8h8v8h-8zm-8 8h8v8h-8z"/>
+  </g>
+</svg>

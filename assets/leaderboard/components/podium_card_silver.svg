@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 270" fill="none">
+ <defs><linearGradient id="card" x1="0" y1="0" x2="0" y2="256"><stop stop-color="#E4F5F9"/><stop offset=".38" stop-color="#F8F9F3"/><stop offset="1" stop-color="#F5E7CF"/></linearGradient><linearGradient id="topEdge" x1="0" y1="0" x2="0" y2="18"><stop stop-color="#1D4C6D"/><stop offset="1" stop-color="#092B46"/></linearGradient></defs>
+ <rect x="3" y="11" width="214" height="256" rx="22" fill="#08243C" opacity=".23"/>
+ <rect x="2" y="2" width="216" height="258" rx="22" fill="url(#card)" stroke="#879DAA" stroke-width="3"/>
+ <path d="M22 2h176c10 0 17 6 19 17H3C5 8 12 2 22 2Z" fill="url(#topEdge)"/>
+ <path d="M25 9h170" stroke="#6A91A4" stroke-width="2" opacity=".64"/>
+ <rect x="11" y="23" width="198" height="226" rx="16" stroke="#FFFDF7" stroke-width="2" opacity=".85"/>
+ <path d="M23 243h174" stroke="#879DAA" stroke-width="2" opacity=".35"/>
+ </svg>
