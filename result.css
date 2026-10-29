@@ -7,11 +7,11 @@ body.showing-result { background: #101e2a; }
 .showing-result .canvas-wrap {
   position: fixed;
   inset: 0;
-  width: min(100vw, calc(100svh * 760 / 920));
-  height: min(100svh, calc(100vw * 920 / 760));
+  width: min(100vw, calc(100svh * 520 / 920));
+  height: min(100svh, calc(100vw * 920 / 520));
   margin: 0 auto;
   border-radius: 0;
-  aspect-ratio: 760 / 920;
+  aspect-ratio: 520 / 920;
 }
 #result-overlay.result-view {
   --result-navy: #102b46;

@@ -82,8 +82,8 @@ button svg { pointer-events: none; }
 .challenge-badge strong { margin-left: 5px; }
 .canvas-wrap {
   position: relative;
-  width: min(100%, calc((100svh - 377px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 760 / 920));
-  aspect-ratio: 760 / 920;
+  width: min(100%, calc((100svh - 377px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 920));
+  aspect-ratio: 520 / 920;
   margin: 9px auto 0;
   isolation: isolate;
   border-radius: 12.52px;
@@ -176,7 +176,7 @@ dialog p { font-size: 12px; line-height: 17px; color: var(--rtb-text-muted); }
   .pause-button { margin-top: 1px; }
   .record-stack { margin-top: 8px; }
   .challenge-badge { top: -10px; font-size: 8px; line-height: 9px; }
-  .canvas-wrap { margin-top: 8px; width: min(100%, calc((100svh - 300px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 760 / 920)); }
+  .canvas-wrap { margin-top: 8px; width: min(100%, calc((100svh - 300px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 920)); }
   .board-toolbar { margin-top: 8px; }
   .instruction-card { height: 57px; padding-top: 3px; padding-bottom: 3px; }
   .toolbar-actions { margin-top: 8px; }
@@ -209,12 +209,12 @@ body.reduce-motion * { transition: none !important; }
     --desktop-rail: clamp(220px, 20vw, 280px);
     --desktop-gap: clamp(16px, 2vw, 28px);
     --desktop-board: min(
-      calc((100svh - 32px) * 760 / 920),
+      calc((100svh - 32px) * 520 / 920),
       calc(100vw - 32px - var(--desktop-rail) - var(--desktop-gap))
     );
     position: relative;
     width: calc(32px + var(--desktop-rail) + var(--desktop-gap) + var(--desktop-board));
-    height: calc(var(--desktop-board) * 920 / 760);
+    height: calc(var(--desktop-board) * 920 / 520);
     min-width: 0;
     max-width: none;
     margin: 16px 0;
@@ -256,7 +256,7 @@ body.reduce-motion * { transition: none !important; }
     height: 100%;
     min-height: 0;
     margin: 0;
-    aspect-ratio: 760 / 920;
+    aspect-ratio: 520 / 920;
     border-radius: 18px;
   }
   .game-hud {
@@ -387,4 +387,124 @@ body.reduce-motion * { transition: none !important; }
   .restart-button { grid-column: auto; font-size: 9px; letter-spacing: .2px; }
   .sound-button, .motion-button { padding: 0 5px; font-size: 8px; letter-spacing: 0; }
   .sound-button svg { width: 18px; height: 18px; }
+}
+
+/* Native settings keep secondary copy and preferences outside the play area.
+   The app closes this sheet before a mobile aim begins. */
+.game-settings { position: relative; min-width: 0; }
+.game-settings > summary {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 8px 12px; border: 1.2px solid var(--rtb-border);
+  border-radius: var(--rtb-radius-control); background: var(--rtb-surface);
+  color: var(--rtb-text-muted); font-size: 11px; font-weight: 900;
+  letter-spacing: .6px; list-style: none; cursor: pointer; touch-action: manipulation;
+}
+.game-settings > summary::-webkit-details-marker { display: none; }
+.game-settings > summary:focus-visible { outline: 3px solid #789376; outline-offset: 3px; }
+.game-settings > summary span { font-size: 17px; line-height: 20px; }
+.game-settings[open] > summary { background: #e4ecd9; color: var(--rtb-accent); }
+.settings-panel {
+  position: absolute; z-index: 8; bottom: calc(100% + 8px); right: 0;
+  width: min(360px, calc(100vw - 16px)); max-height: min(340px, 60svh);
+  overflow-y: auto; overscroll-behavior: contain; padding: 12px;
+  border: 1px solid #d2c1a1; border-radius: 15px; background: #fff9ef;
+  box-shadow: 0 5px 22px #49362e32;
+}
+.settings-panel .record-stack { position: static; display: block; grid-column: auto; grid-row: auto; height: auto; min-height: 0; margin: 0; }
+.settings-panel .best-strip { height: 28px; padding-inline: 9px; }
+.settings-panel .challenge-badge { position: static; margin-top: 5px; font-size: 9px; line-height: 14px; white-space: normal; }
+.settings-panel .instruction-card { height: auto; min-height: 62px; margin: 8px 0; padding: 8px; }
+.settings-panel .live-hint { -webkit-line-clamp: 3; font-size: 11px; line-height: 16px; }
+.settings-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.settings-actions button { min-height: 44px; height: 44px; }
+
+/* The shared portrait world is520×920. Its canvas uses this actual ratio;
+   neither art nor collision coordinates are stretched to fill the viewport. */
+@media (max-width: 739px) {
+  .playground {
+    display: flex; flex-direction: column; width: min(520px, 100%);
+    height: 100svh; min-height: 0; padding: 0;
+  }
+  .site-header { flex: none; height: calc(82px + env(safe-area-inset-top, 0px)); padding: calc(5px + env(safe-area-inset-top, 0px)) 8px 0; }
+  .brand { width: min(250px, calc(100% - 12px)); margin: 0; }
+  .stage-line { top: calc(59px + env(safe-area-inset-top, 0px)); left: 9px; right: 9px; }
+  .game-shell { display: flex; flex: 1; flex-direction: column; min-height: 0; gap: 6px; margin: 0; padding: 0 4px calc(6px + env(safe-area-inset-bottom, 0px)); }
+  .game-hud { flex: none; height: 56px; padding: 0 3px; }
+  .stat-card { height: 56px; padding-top: 2px; padding-bottom: 2px; }
+  .canvas-wrap {
+    flex: none; width: min(100%, calc((100svh - 210px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 920));
+    height: auto; aspect-ratio: 520 / 920; margin: auto;
+  }
+  .board-toolbar { position: relative; z-index: 7; flex: none; margin: 0 3px; }
+  .toolbar-actions { grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+  .toolbar-actions > .restart-button { grid-column: auto; }
+  .toolbar-actions button { height: 44px; min-height: 44px; }
+  .settings-panel .sound-button { font-size: 10px; }
+  .settings-panel .motion-button { font-size: 10px; }
+
+  body[data-phase="playing"] .site-header { height: calc(32px + env(safe-area-inset-top, 0px)); padding-top: env(safe-area-inset-top, 0px); }
+  body[data-phase="playing"] .brand { width: 150px; }
+  body[data-phase="playing"] .stage-line { top: calc(5px + env(safe-area-inset-top, 0px)); left: auto; right: 8px; height: 21px; }
+  body[data-phase="playing"] .stage-kicker,
+  body[data-phase="playing"] .difficulty-label { display: none; }
+  body[data-phase="playing"] .game-shell { gap: 4px; padding: 0 1px env(safe-area-inset-bottom, 0px); }
+  body[data-phase="playing"] .game-hud { grid-template-columns: 1.45fr 1fr 44px; gap: 6px; height: 44px; padding: 0 6px; }
+  body[data-phase="playing"] .stat-card { height: 44px; padding: 2px 9px; border-radius: 11px; box-shadow: 0 2px #decdb0; }
+  body[data-phase="playing"] .stat-label { font-size: 8px; line-height: 10px; letter-spacing: .7px; }
+  body[data-phase="playing"] .time-stat strong,
+  body[data-phase="playing"] .move-line strong { font-size: 24px; line-height: 27px; letter-spacing: -.7px; }
+  body[data-phase="playing"] .time-stat strong.very-long-time { font-size: 21px; }
+  body[data-phase="playing"] .time-stat strong.extra-long-time { font-size: 18px; }
+  body[data-phase="playing"] .time-unit { font-size: 12px; }
+  body[data-phase="playing"] .stat-total { font-size: 14px; }
+  body[data-phase="playing"] .pause-button { width: 44px; height: 44px; min-height: 44px; margin: 0; padding: 9px; border-radius: 11px; }
+  body[data-phase="playing"] .canvas-wrap {
+    width: min(100%, calc((100svh - 136px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 920));
+    margin: auto;
+  }
+  body[data-phase="playing"] .board-toolbar { margin: 0 5px 4px; }
+}
+
+@media (max-width: 739px) and (max-height: 650px) {
+  body[data-phase="playing"] .site-header { height: calc(20px + env(safe-area-inset-top, 0px)); }
+  body[data-phase="playing"] .brand { width: 100px; }
+  body[data-phase="playing"] .stage-line { top: calc(1px + env(safe-area-inset-top, 0px)); height: 17px; }
+  body[data-phase="playing"] .stage-badge { height: 17px; font-size: 8px; }
+  body[data-phase="playing"] .game-shell { gap: 2px; }
+  body[data-phase="playing"] .board-toolbar { margin-bottom: 0; }
+  body[data-phase="playing"] .canvas-wrap { width: min(100%, calc((100svh - 112px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 920)); }
+}
+
+/* Desktop keeps its control rail and uses the same physical portrait world. */
+@media (min-width: 740px) {
+  .site-header { height: 104px; }
+  .game-shell { grid-template-rows: 104px 132px 0 minmax(0, 1fr); row-gap: 12px; }
+  .game-hud { height: 132px; grid-template-rows: 66px 56px; gap: 10px; }
+  .board-toolbar { gap: 0; }
+  .board-toolbar > .toolbar-actions { display: flex; flex-direction: column; gap: 10px; }
+  .game-settings { position: static; }
+  .game-settings > summary { display: none; }
+  .settings-panel { position: static; display: grid; gap: 10px; width: 100%; max-height: none; overflow: visible; padding: 0; border: 0; background: none; box-shadow: none; }
+  .settings-panel .instruction-card { min-height: 72px; margin: 0; }
+  .settings-actions { gap: 8px; }
+  .settings-actions .sound-button, .settings-actions .motion-button { font-size: 9px; letter-spacing: 0; padding-inline: 4px; }
+  .settings-actions .sound-button svg { width: 20px; height: 20px; }
+}
+@media (min-width: 740px) and (max-height: 660px) {
+  .site-header { height: 76px; }
+  .game-shell { grid-template-rows: 76px 128px 0 minmax(0, 1fr); }
+  .game-hud { height: 128px; grid-template-rows: 62px 56px; }
+}
+@media (min-width: 740px) and (max-height: 480px) {
+  .site-header { height: 56px; }
+  .brand { width: 170px; }
+  .stage-line { position: absolute; top: 39px; left: 0; right: 0; height: 17px; margin: 0; }
+  .stage-kicker, .difficulty-label { display: none; }
+  .stage-badge { height: 17px; margin-left: auto; }
+  .game-shell { grid-template-rows: 56px 64px 0 minmax(0, 1fr); row-gap: 8px; }
+  .game-hud { height: 64px; grid-template-columns: 1.5fr 1fr 44px; grid-template-rows: 64px; gap: 8px; }
+  .time-stat { grid-column: 1; grid-row: 1; }
+  .move-stat { grid-column: 2; grid-row: 1; }
+  .pause-button { grid-column: 3; grid-row: 1; }
+  .settings-panel { max-height: max(44px, calc(100svh - 228px)); overflow-y: auto; }
 }

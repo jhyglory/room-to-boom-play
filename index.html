@@ -8,12 +8,12 @@
   <title>Room to Boom! — Moving day</title>
   <link rel="preload" href="./fonts/fredoka-bold-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="./fonts/nunito-latin-variable.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./style.css?v=0.17.1-english1">
+  <link rel="stylesheet" href="./style.css?v=0.18.0-english1">
   <link rel="preload" href="./assets/leaderboard/result-title-en.png" as="image">
-  <link rel="stylesheet" href="./result.css?v=0.17.1-english1">
+  <link rel="stylesheet" href="./result.css?v=0.18.0-english1">
 </head>
 <body>
-  <main class="playground" data-build="0.17.1">
+  <main class="playground" data-build="0.18.0">
     <header class="site-header">
       <a class="brand" href="./" aria-label="Room to Boom home"><img src="./assets/brand/room-to-boom-golden-toy.png" width="2172" height="724" alt="Room to Boom!" decoding="async" fetchpriority="high" draggable="false"></a>
       <div class="stage-line"><span class="stage-kicker">STUDIO SLINGSHOT</span><span class="difficulty-label" title="16 close-packed pieces · light pieces coast farther · heavy pieces resist">TIGHT · 16</span><span class="stage-badge">STAGE 01</span></div>
@@ -24,9 +24,8 @@
         <div class="stat-card move-stat"><span class="stat-label">MOVED IN</span><div class="move-line"><strong><span id="moved">0</span><span class="stat-total"> / 16</span></strong><div class="progress-track sr-only"><div id="progress"></div></div></div></div>
         <button id="pause" class="pause-button" aria-label="Pause game" title="Pause game" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4v17M17.5 4v17"/></svg></button>
       </div>
-      <div class="record-stack"><div class="best-strip"><span>PERSONAL BEST</span><strong id="best-time">—</strong></div><div id="challenge-badge" class="challenge-badge" hidden>FRIEND’S TIME <strong id="challenge-time"></strong></div></div>
       <div class="canvas-wrap" id="canvas-wrap">
-        <canvas id="game" width="760" height="920" role="img" aria-label="Move all 16 furniture pieces from OLD HOME below to NEW HOME above. Hold a piece, pull down to launch up, then release. Plaster walls resist light touches, crack under solid impacts and break under enough force. Keep the whole piece inside the mint room and still for half a second."></canvas>
+        <canvas id="game" width="520" height="920" role="img" aria-label="Move all 16 furniture pieces from OLD HOME below to NEW HOME above. Hold a piece, pull down to launch up, then release. Plaster walls resist light touches, crack under solid impacts and break under enough force. Keep the whole piece inside the mint room and still for half a second."></canvas>
         <div class="overlay" id="start-overlay">
           <div class="start-card">
             <span class="card-eyebrow">IT’S MOVING DAY</span>
@@ -42,11 +41,19 @@
         <div class="board-hint" id="board-hint">PULL DOWN · LAUNCH UP</div>
       </div>
       <div class="board-toolbar">
-        <div class="instruction-card"><span class="instruction-icon" aria-hidden="true"><svg viewBox="0 0 34 34"><path d="M17 27V7M11 13l6-6 6 6"/></svg></span><div class="instruction-copy"><strong>PULL BACK. LET IT FLY.</strong><span id="live-hint" class="live-hint">Launch opposite to your pull. Time is the only score.</span></div></div>
         <div class="toolbar-actions">
           <button id="retry" class="restart-button" aria-label="Restart level">RESTART</button>
-          <button id="sound" class="sound-button" aria-pressed="true" aria-label="Mute sound"><svg viewBox="0 0 26 26" aria-hidden="true"><path class="sound-speaker" d="M3 9h4l6-5v18l-6-5H3Z"/><path class="sound-waves" d="M18 7q7 6 0 12"/></svg><span id="sound-label">SOUND</span></button>
-          <button id="motion" class="motion-button" aria-pressed="false" title="Reduce visual effects">LESS MOTION</button>
+          <details class="game-settings" id="game-settings">
+            <summary aria-label="Game settings">SETTINGS <span aria-hidden="true">⚙</span></summary>
+            <div class="settings-panel" id="game-settings-panel">
+              <div class="record-stack"><div class="best-strip"><span>PERSONAL BEST</span><strong id="best-time">—</strong></div><div id="challenge-badge" class="challenge-badge" hidden>FRIEND’S TIME <strong id="challenge-time"></strong></div></div>
+              <div class="instruction-card"><span class="instruction-icon" aria-hidden="true"><svg viewBox="0 0 34 34"><path d="M17 27V7M11 13l6-6 6 6"/></svg></span><div class="instruction-copy"><strong>PULL BACK. LET IT FLY.</strong><span id="live-hint" class="live-hint">Launch opposite to your pull. Time is the only score.</span></div></div>
+              <div class="settings-actions">
+                <button id="sound" class="sound-button" aria-pressed="true" aria-label="Mute sound"><svg viewBox="0 0 26 26" aria-hidden="true"><path class="sound-speaker" d="M3 9h4l6-5v18l-6-5H3Z"/><path class="sound-waves" d="M18 7q7 6 0 12"/></svg><span id="sound-label">SOUND</span></button>
+                <button id="motion" class="motion-button" aria-pressed="false" title="Reduce visual effects">LESS MOTION</button>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
       <ul id="checklist" class="sr-only" aria-label="Moving checklist"><li data-item="sofa">Sofa</li><li data-item="bed">Bed</li><li data-item="fridge">Fridge</li><li data-item="bookcase">Bookcase</li><li data-item="table">Table</li><li data-item="chair">Chair</li><li data-item="boxA">Box no. 1</li><li data-item="boxB">Box no. 2</li><li data-item="lamp">Floor lamp</li><li data-item="plant">Plant</li><li data-item="armchair">Armchair</li><li data-item="wardrobe">Wardrobe</li><li data-item="dresser">Dresser</li><li data-item="tv_stand">TV stand</li><li data-item="desk">Desk</li><li data-item="washing_machine">Washing machine</li></ul>
@@ -94,6 +101,6 @@
   <dialog id="restart-dialog"><form method="dialog"><span class="card-eyebrow">A FRESH START?</span><h2>Another moving day.</h2><p>This run will reset to the original layout.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">Keep this run</button><button value="restart" class="primary-button">Start over ↻</button></div></form></dialog>
   <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
   <script src="./vendor/matter.min.js"></script>
-  <script type="module" src="./app.js?v=0.17.1"></script>
+  <script type="module" src="./app.js?v=0.18.0"></script>
 </body>
 </html>

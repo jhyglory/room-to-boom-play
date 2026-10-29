@@ -1,7 +1,8 @@
 // V2 supplied PNG bytes are preserved under assets/v2. Registration below is
-// authored render metadata, never a replacement for the unchanged colliders.
+// authored render metadata, registered to the shared v18 portrait colliders.
 // Full transparent source frames use uniform furniture scales; the vertical
 // bed has an explicit local quarter-turn. No PNG is cropped or re-encoded.
+export const FURNITURE_ART_SCALE = .85;
 const FURNITURE_SPECS = {
   "sofa": {
     "filename": "assets/v2/furniture/sofa_mint.png",
@@ -67,7 +68,7 @@ const FURNITURE_SPECS = {
       1182
     ],
     "registration": "authored-rotated-uniform",
-    "registrationNote": "Vertical source rotates90degrees locally; physical horizontal148x78 collider and body angle remain unchanged."
+    "registrationNote": "Vertical source rotates90degrees locally; base horizontal148x78 footprint uses the common portrait scale; its body angle remains independent."
   },
   "fridge": {
     "filename": "assets/v2/furniture/fridge_blue.png",
@@ -100,7 +101,7 @@ const FURNITURE_SPECS = {
       1030
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "bookcase": {
     "filename": "assets/v2/furniture/bookcase_oak.png",
@@ -117,8 +118,8 @@ const FURNITURE_SPECS = {
     "sourceOrientation": "near-square",
     "type": "raster_furniture_sprite",
     "body": {
-      "width": 56,
-      "height": 112
+      "width": 80,
+      "height": 78
     },
     "opaqueBounds": [
       287,
@@ -132,8 +133,8 @@ const FURNITURE_SPECS = {
       1038,
       1004
     ],
-    "registration": "authored-pick-capped-uniform",
-    "registrationNote": "Near-square art cannot match the frozen56x112 collider uniformly. Alpha16 width capped80 to stay within12-unit pick padding; opaque height~76.81 leaves~17.60 invisible vertical collider per side."
+    "registration": "authored-footprint-uniform",
+    "registrationNote": "The near-square art now shares an80x78 base footprint rather than an invisible tall56x112 collider. The full source frame and uniform image scale are retained."
   },
   "table": {
     "filename": "assets/v2/furniture/dining_table_oak.png",
@@ -166,7 +167,7 @@ const FURNITURE_SPECS = {
       850
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "chair": {
     "filename": "assets/v2/furniture/dining_chair_lavender.png",
@@ -199,7 +200,7 @@ const FURNITURE_SPECS = {
       1055
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "boxA": {
     "filename": "assets/v2/furniture/moving_box_yellow.png",
@@ -232,7 +233,7 @@ const FURNITURE_SPECS = {
       903
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "boxB": {
     "filename": "assets/v2/furniture/moving_box_kraft.png",
@@ -265,7 +266,7 @@ const FURNITURE_SPECS = {
       902
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "lamp": {
     "filename": "assets/v2/furniture/floor_lamp_mustard.png",
@@ -298,7 +299,7 @@ const FURNITURE_SPECS = {
       1144
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "plant": {
     "filename": "assets/v2/furniture/potted_plant.png",
@@ -331,7 +332,7 @@ const FURNITURE_SPECS = {
       931
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "armchair": {
     "filename": "assets/v2/furniture/armchair_coral.png",
@@ -364,7 +365,7 @@ const FURNITURE_SPECS = {
       949
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "wardrobe": {
     "filename": "assets/v2/furniture/wardrobe_cream.png",
@@ -397,7 +398,7 @@ const FURNITURE_SPECS = {
       907
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "dresser": {
     "filename": "assets/v2/furniture/dresser_oak.png",
@@ -430,7 +431,7 @@ const FURNITURE_SPECS = {
       907
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "tv_stand": {
     "filename": "assets/v2/furniture/tv_stand_oak.png",
@@ -463,7 +464,7 @@ const FURNITURE_SPECS = {
       785
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "desk": {
     "filename": "assets/v2/furniture/desk_oak.png",
@@ -496,7 +497,7 @@ const FURNITURE_SPECS = {
       813
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   },
   "washing_machine": {
     "filename": "assets/v2/furniture/washing_machine_cream.png",
@@ -529,9 +530,16 @@ const FURNITURE_SPECS = {
       1115
     ],
     "registration": "authored-balanced-uniform",
-    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against the unchanged collider."
+    "registrationNote": "Full source frame; uniform scale balances the opaque-art width and height against its base collider before the common portrait scale."
   }
 };
+// One isotropic stage scale applies to both render registration and engine
+// footprints. Transparency remains source padding, never a collision box.
+for (const spec of Object.values(FURNITURE_SPECS)) {
+  spec.scale *= FURNITURE_ART_SCALE;
+  spec.body = { width: spec.body.width * FURNITURE_ART_SCALE,
+    height: spec.body.height * FURNITURE_ART_SCALE };
+}
 export const FURNITURE_ASSET_IDS = Object.freeze(Object.keys(FURNITURE_SPECS));
 const ENVIRONMENT_SPECS = {
   "floor_mint": {

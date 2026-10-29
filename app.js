@@ -1,11 +1,11 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.17.1';
-import { GameRenderer } from './render.js?v=0.17.1';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.18.0';
+import { GameRenderer } from './render.js?v=0.18.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.17.1';
-import { GameAudio } from './audio.js?v=0.17.1';
+import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.18.0';
+import { GameAudio } from './audio.js?v=0.18.0';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.17.1';
-import { LEADERBOARD_MODE } from './runtime-config.js?v=0.17.1';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.18.0';
+import { LEADERBOARD_MODE } from './runtime-config.js?v=0.18.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
 function readSetting(key){try{return storage()?.getItem(key);}catch{return null;}}
@@ -68,11 +68,12 @@ let resultWasNewBest = false;
 let nicknameEditing = false;
 let nicknameSaving = false;
 let leaderboardSyncing = false;
+const diagnosticImpacts=[];
 const itemNames = Object.fromEntries(FURNITURE.map(item=>[item.id,item.name]));
 const STEP = PHYSICS.stepMs;
 // Keep reference-world speed units, then add the real material and mass
 // context so each contact has an audible character and impact strength.
-const REFERENCE_WORLD_SCALE = WORLD.width / 540;
+const REFERENCE_WORLD_SCALE = 760 / 540; // Keep physical audio units independent of the portrait camera.
 
 function announce(message){$('announcer').textContent=message;}
 function updateBest(){
@@ -148,6 +149,8 @@ function updateDeliveryHint(now){
 }
 function isRankingScreen(){return phase==='complete'||phase==='rankings';}
 function showPhase(){
+  document.body.setAttribute('data-phase',phase);
+  if(phase!=='playing'&&!window.matchMedia('(min-width: 740px)').matches)$('game-settings').open=false;
   $('start-overlay').classList.toggle('hidden',phase!=='menu');
   $('pause-overlay').classList.toggle('hidden',phase!=='paused');
   $('result-overlay').classList.toggle('hidden',!isRankingScreen());
@@ -182,7 +185,7 @@ function start(){
 }
 function reset(){
   clearResult();audio.cancelPending();
-  release();world.reset();clock.reset();renderer.clearEffects();impactPresentation.clear();
+  release();world.reset();diagnosticImpacts.length=0;clock.reset();renderer.clearEffects();impactPresentation.clear();
   accumulator=0;lastFrame=performance.now();phase='playing';lastItemId=null;hintUntil=0;nextHintUpdate=0;
   activateSound('enable',{resume:true});
   updateProgress();updateTimer(performance.now());showPhase();
@@ -281,7 +284,7 @@ async function openRankings(){
   announce('Rankings loaded.');
 }
 function goMain(){
-  clearResult();audio.cancelPending();release();world.reset();clock.reset();
+  clearResult();audio.cancelPending();release();world.reset();diagnosticImpacts.length=0;clock.reset();
   renderer.clearEffects();impactPresentation.clear();accumulator=0;
   lastFrame=performance.now();phase='menu';lastItemId=null;hintUntil=0;nextHintUpdate=0;
   void audio.suspend();updateProgress();updateTimer(performance.now());showPhase();
@@ -339,7 +342,13 @@ world.onDeliver = body => {
   announce(`${itemNames[body.game.id]||body.game.id} moved. ${world.moved} of ${TOTAL_FURNITURE}.`);
   if(world.moved===TOTAL_FURNITURE)finish();
 };
+function observeWallImpact(type,wall,info){
+  if(!completionQA)return;
+  diagnosticImpacts.push({type,atMs:world.elapsedMs,wallId:wall.game.id,bodyId:info.bodyId,point:info.point?{...info.point}:null,speed:info.speed,energy:info.energy,damage:info.damage,remainingHealth:info.remainingHealth,broken:!!info.broken});
+  if(diagnosticImpacts.length>128)diagnosticImpacts.shift();
+}
 world.onBreak = (wall, info = {}) => {
+  observeWallImpact('break',wall,info);
   const referenceSpeed=(Number.isFinite(info.speed)?info.speed:0)/REFERENCE_WORLD_SCALE;
   audio.collision(referenceSpeed,{broken:true,point:info.point,sourceId:`${info.bodyId||'piece'}:${wall.game?.id}`,bodyId:info.bodyId,firstCrack:info.firstCrack,damaged:info.damage>0,impactEnergy:info.energy,bounce:info.restitution,wall:true,material:info.material,heavy:info.heavy,kind:info.kind});
   renderer.addWallBreak(wall,{...info,referenceSpeed});
@@ -350,6 +359,7 @@ world.onBreak = (wall, info = {}) => {
 };
 world.onWallHit = (wall, info = {}) => {
   if(info.broken)return;
+  observeWallImpact('hit',wall,info);
   const referenceSpeed=(Number.isFinite(info.speed)?info.speed:0)/REFERENCE_WORLD_SCALE;
   impactPresentation.hit(performance.now(),info,reducedMotion);
   renderer.addWallHit(wall,{...info,referenceSpeed});
@@ -373,6 +383,7 @@ canvas.addEventListener('pointerdown',event=>{
   if(phase!=='playing')return;
   const point=renderer.screenToWorld(event.clientX,event.clientY);
   const body=world.grab(point.x,point.y);
+  if(body&&!window.matchMedia('(min-width: 740px)').matches)$('game-settings').open=false;
   if(!body)return;
   lastItemId=body.game.id;
   activateSound('grab');
@@ -472,7 +483,9 @@ window.addEventListener('keydown',event=>{
   }
 });
 const resizeObserver=new ResizeObserver(()=>renderer.resize());resizeObserver.observe(canvas);
-window.addEventListener('resize',()=>renderer.resize());
+function syncSettingsLayout(){if(window.matchMedia('(min-width: 740px)').matches)$('game-settings').open=true;else $('game-settings').open=false;}
+window.addEventListener('resize',()=>{renderer.resize();syncSettingsLayout();});
+syncSettingsLayout();
 $('motion').setAttribute('aria-pressed',String(reducedMotion));
 document.body.classList.toggle('reduce-motion',reducedMotion);
 updateBest();updateSound();updateTimer(performance.now());
@@ -485,11 +498,12 @@ showPhase();updateProgress();renderer.resize();
 const completionQA=(()=>{try{const url=new URL(window.location.href);return ['127.0.0.1','localhost'].includes(url.hostname)&&url.searchParams.get('qa')==='completion';}catch{return false;}})();
 if(completionQA)canvas.addEventListener('room-to-boom:inspect',event=>{
   if(!event.detail||typeof event.detail!=='object')return;
-  event.detail.snapshot={phase,moved:world.moved,resultSeconds,
-    bodies:world.bodies.map(body=>({id:body.game.id,position:{...body.position},velocity:{...world.M.Body.getVelocity(body)},mass:body.mass,restitution:body.restitution,angle:body.angle,w:body.game.w,h:body.game.h,
+  const activeBodies=new Set(world.M.Composite.allBodies(world.engine.world));
+  event.detail.snapshot={phase,moved:world.moved,resultSeconds,world:JSON.parse(JSON.stringify(WORLD)),impacts:diagnosticImpacts.map(event=>({...event,point:event.point?{...event.point}:null})),maxPull:PHYSICS.maxPull,
+    bodies:world.bodies.map(body=>({id:body.game.id,position:{...body.position},velocity:{...world.M.Body.getVelocity(body)},mass:body.mass,restitution:body.restitution,angle:body.angle,angularVelocity:world.M.Body.getAngularVelocity(body),vertices:body.vertices.map(({x,y})=>({x,y})),w:body.game.w,h:body.game.h,
       maxLaunchSpeed:body.game.maxLaunchSpeed,minimumLaunchSpeed:body.game.minimumLaunchSpeed,
       frictionAir:body.frictionAir,floorDamping:body.game.floorDamping,delivered:body.game.delivered})),
-    walls:world.walls.map(wall=>({id:wall.game.id,group:wall.game.group,position:{...wall.position},w:wall.game.w,h:wall.game.h,health:wall.game.health,maxHealth:wall.game.maxHealth,cracked:wall.game.cracked,broken:wall.game.broken,hidden:wall.game.hidden}))};
+    walls:world.walls.map(wall=>({id:wall.game.id,group:wall.game.group,position:{...wall.position},w:wall.game.w,h:wall.game.h,health:wall.game.health,maxHealth:wall.game.maxHealth,colliderActive:activeBodies.has(wall),lastHitEnergy:wall.game.lastHitEnergy,lastHitDamage:wall.game.lastHitDamage,cracked:wall.game.cracked,broken:wall.game.broken,hidden:wall.game.hidden}))};
 });
 
 function advanceSimulation(now){

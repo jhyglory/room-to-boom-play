@@ -1,11 +1,18 @@
 /* Room to Boom! — deterministic, zero-gravity moving physics. */
 export const WORLD = Object.freeze({
-  width: 760,
+  width: 520,
   height: 920,
-  delivery: Object.freeze({ minX: 84, maxX: 676, minY: 43, maxY: 411 }),
+  delivery: Object.freeze({ minX: 56, maxX: 464, minY: 43, maxY: 411 }),
+  oldInterior: Object.freeze({ minX:56,maxX:464,minY:509,maxY:851 }),
+  rooms: Object.freeze({
+    old: Object.freeze({ minX:47,maxX:473,minY:500,maxY:860 }),
+    new: Object.freeze({ minX:47,maxX:473,minY:34,maxY:420 }),
+  }),
+  doorway: Object.freeze({ minX:190,maxX:330,centerX:260 }),
+  corridor: Object.freeze({ minY:429,maxY:491 }),
 });
 
-export const FURNITURE = Object.freeze([
+export const REFERENCE_FURNITURE = Object.freeze([
   { id: 'sofa', material: 'fabric', name: 'Sofa', kind: 'sofa', x: 279, y: 688, w: 128, h: 68, heavy: 2, frictionAir: 0.05, restitution: 0.4, color: '#77CDBA' },
   { id: 'bed', material: 'fabric', name: 'Bed', kind: 'bed', x: 181, y: 609, w: 148, h: 78, heavy: 2.6, frictionAir: 0.06, restitution: 0.2, color: '#FF8575' },
   { id: 'fridge', material: 'metal', name: 'Fridge', kind: 'fridge', x: 496, y: 616, w: 62, h: 92, heavy: 3.4, frictionAir: 0.02, restitution: 0.08, color: '#AED5E4' },
@@ -25,6 +32,18 @@ export const FURNITURE = Object.freeze([
   { id: 'desk', material: 'wood', name: 'Desk', kind: 'desk', x: 316, y: 606, w: 110, h: 72, heavy: 1.7, frictionAir: 0.04, restitution: 0.25, color: '#D7AC80' },
   { id: 'washing_machine', material: 'metal', name: 'Washing machine', kind: 'washing_machine', x: 565, y: 610, w: 64, h: 80, heavy: 3.8, frictionAir: 0.025, restitution: 0.08, color: '#D8D5C4' },
 ]);
+const FURNITURE_SCALE=.85;
+const PORTRAIT_LAYOUT=Object.freeze({
+  bed:[169,550],boxA:[260,550],fridge:[323,550],washing_machine:[391,550],
+  wardrobe:[142,650],desk:[240,650],bookcase:[333,650],plant:[399,650],
+  sofa:[126,737],armchair:[225,737],dresser:[310,737],table:[405.5,737],
+  chair:[165.5,817],tv_stand:[237.85,817],boxB:[307.65,817],lamp:[360.45,817],
+});
+export const FURNITURE=Object.freeze(REFERENCE_FURNITURE.map(spec=>Object.freeze({
+  ...spec,x:PORTRAIT_LAYOUT[spec.id][0],y:PORTRAIT_LAYOUT[spec.id][1],
+  w:(spec.id==='bookcase'?80:spec.w)*FURNITURE_SCALE,
+  h:(spec.id==='bookcase'?78:spec.h)*FURNITURE_SCALE,
+})));
 export const TOTAL_FURNITURE = FURNITURE.length;
 
 // Base material floor drag in this zero-gravity world, per60Hz frame.
@@ -58,14 +77,14 @@ export const GLIDE_PROFILES = Object.freeze({
   washing_machine: Object.freeze({ floorDamping: .040 }),
 });
 
-// v16 makes contacts springier while retaining distinct upholstery, wood,
+// v18 moderates elastic contacts while retaining distinct upholstery, wood,
 // cardboard and appliance responses. These are authored game coefficients;
 // FURNITURE keeps the historical material baseline, not a claim of SI values.
 export const BOUNCE_PROFILES = Object.freeze({
-  sofa: .72, bed: .60, fridge: .70, bookcase: .66, table: .78,
-  chair: .84, boxA: .75, boxB: .75, lamp: .86, plant: .80,
-  armchair: .74, wardrobe: .62, dresser: .64, tv_stand: .72,
-  desk: .76, washing_machine: .68,
+  sofa: .62, bed: .52, fridge: .60, bookcase: .58, table: .66,
+  chair: .70, boxA: .64, boxB: .64, lamp: .72, plant: .68,
+  armchair: .63, wardrobe: .54, dresser: .56, tv_stand: .62,
+  desk: .65, washing_machine: .59,
 });
 
 // Springy contact faces couple to an existing plaster crack more effectively.
@@ -73,14 +92,14 @@ export const BOUNCE_PROFILES = Object.freeze({
 // kinetic energy or multiplies the work released by a surviving rebound.
 export const WALL_BREAK_PROFILES = Object.freeze(Object.fromEntries(
   Object.entries(BOUNCE_PROFILES).map(([id,bounce]) => [id,Object.freeze({
-    resistanceScale: 1 - .5 * Math.max(0,Math.min(1,(bounce-.60)/.26)),
+    resistanceScale: 1 - .5 * Math.max(0,Math.min(1,(bounce-.52)/.20)),
   })]),
 ));
 
 // Original-game constants are historical reference values. v11's spring-energy
 // launch is authored here, retaining the bounded pull distance and material mass.
 // https://www.zounoashi.com/games/hikkoshi/index.html (read 2026-10-28).
-const REFERENCE_SCALE = WORLD.width / 540;
+const REFERENCE_SCALE = 760 / 540;
 export const REFERENCE_LAUNCH = Object.freeze({
   pullGain: .13,
   launchCap: 24 * REFERENCE_SCALE,
@@ -96,10 +115,11 @@ export const PHYSICS = Object.freeze({
   speedCap: 60,
   maxLaunchEnergy: 3000,
   minimumLaunch: REFERENCE_LAUNCH.minimumLaunch / Math.sqrt(MASS_MULTIPLIER),
-  maxPull: REFERENCE_LAUNCH.maxPull,
-  angularCap: .3,
+  maxPull: 180,
+  angularCap: .15,
+  spinDamping: .02,
   wallSegmentLength: 76,
-  // v16 lowers fracture work, but an intact panel must first crack and rebound.
+  // Strong real energy may open an intact panel; medium contacts crack and rebound.
   wallHealth: 4.5,
   weakWallHealth: 1.5,
   // Local plaster calibration in Matter mass * base-frame velocity squared.
@@ -107,8 +127,9 @@ export const PHYSICS = Object.freeze({
   wallEnergyPerHealth: 70,
   wallElasticEnergy: 60,
   wallEnergyTransfer: .65,
-  wallRestitution: .97,
-  wallFirstDamageFraction: .65,
+  wallRestitution: .86,
+  wallIntactEnergyPerHealth: 200,
+  wallIntactMinEnergy: 750,
   wallFriction: .02,
   contactReboundMinSpeed: .8,
   wallMinClosingSpeed: 2.5,
@@ -158,9 +179,13 @@ export class MovingWorld {
     this._wallStrikes = new Map();
     this.walls = [];
     this.bodies = FURNITURE.map((spec) => {
+      const reference=REFERENCE_FURNITURE.find(item=>item.id===spec.id);
+      const referenceBody=Bodies.rectangle(0,0,reference.w,reference.h,{
+        chamfer:{radius:5},density:.001*reference.heavy*PHYSICS.massMultiplier,
+      });
       const body = Bodies.rectangle(spec.x, spec.y, spec.w, spec.h, {
         label: spec.id,
-        chamfer: { radius: 5 },
+        chamfer: { radius: 5*FURNITURE_SCALE },
         density: .001 * spec.heavy * PHYSICS.massMultiplier,
         friction: .15,
         frictionStatic: .18,
@@ -168,6 +193,9 @@ export class MovingWorld {
         restitution: BOUNCE_PROFILES[spec.id],
         slop: .015,
       });
+      // Keep each v17 collision mass. Inertia is recomputed for the actual
+      // uniformly smaller outline (and the corrected bookcase footprint).
+      this.M.Body.setMass(body,referenceBody.mass);
       body.game = { ...spec, frictionAir: body.frictionAir, restitution: body.restitution, mass: body.mass, massMultiplier: PHYSICS.massMultiplier,
         minimumLaunchSpeed: PHYSICS.minimumLaunch,
         maxLaunchSpeed: Math.sqrt(2 * PHYSICS.maxLaunchEnergy / body.mass),
@@ -176,9 +204,7 @@ export class MovingWorld {
       return body;
     });
 
-    const wall = (group, x, originalY, w, h, weak = false, hidden = false) => {
-      // Mirror the existing stage: the old room starts below the new room.
-      const y = WORLD.height - originalY;
+    const wall = (group, x, y, w, h, weak = false, hidden = false) => {
       const horizontal = w >= h;
       const count = hidden ? 1 : Math.ceil(Math.max(w, h) / PHYSICS.wallSegmentLength);
       for (let index = 0; index < count; index++) {
@@ -203,22 +229,22 @@ export class MovingWorld {
       }
     };
     // The only indestructible walls are invisible perimeter guard rails.
-    wall('world-left', 15, 460, 18, 920, false, true);
-    wall('world-right', 745, 460, 18, 920, false, true);
-    wall('world-top', 380, 15, 760, 18, false, true);
-    wall('world-bottom', 380, 919, 760, 18, false, true);
-    wall('old-top', 380, 60, 628, 18);
-    wall('old-left', 75, 240, 18, 378);
-    wall('old-right', 685, 240, 18, 378);
-    wall('old-bottom-left', 108, 420, 84, 18);
-    wall('old-weak', 226, 420, 152, 18, true);
-    wall('old-bottom-right', 576, 420, 236, 18);
-    wall('new-top-left', 184, 500, 236, 18);
-    wall('new-weak', 534, 500, 152, 18, true);
-    wall('new-top-right', 652, 500, 84, 18);
-    wall('new-left', 75, 693, 18, 404);
-    wall('new-right', 685, 693, 18, 404);
-    wall('new-bottom', 380, 886, 628, 18);
+    wall('world-left',8,460,16,920,false,true);
+    wall('world-right',512,460,16,920,false,true);
+    wall('world-top',260,8,520,16,false,true);
+    wall('world-bottom',260,912,520,16,false,true);
+    wall('old-top',260,860,444,18);
+    wall('old-left',47,680,18,378);
+    wall('old-right',473,680,18,378);
+    wall('old-bottom-left',64,500,52,18);
+    wall('old-weak',140,500,100,18,true);
+    wall('old-bottom-right',406,500,152,18);
+    wall('new-top-left',114,420,152,18);
+    wall('new-weak',380,420,100,18,true);
+    wall('new-top-right',456,420,52,18);
+    wall('new-left',47,227,18,404);
+    wall('new-right',473,227,18,404);
+    wall('new-bottom',260,34,444,18);
     Composite.add(this.engine.world, [...this.walls, ...this.bodies]);
     Events.on(this.engine, 'collisionStart', (event) => this._collisions(event));
   }
@@ -359,7 +385,8 @@ export class MovingWorld {
       if (!body.isStatic) {
         const retention = Math.exp(-body.game.floorDamping * dt / PHYSICS.floorBaseMs);
         Body.setVelocity(body, Vector.mult(body.velocity, retention));
-        Body.setAngularVelocity(body, body.angularVelocity * retention);
+        Body.setAngularVelocity(body, body.angularVelocity * retention
+          * Math.exp(-PHYSICS.spinDamping*dt/PHYSICS.floorBaseMs));
       }
       body.game.impact = Math.max(0, body.game.impact - dt / 220);
     }
@@ -498,17 +525,16 @@ export class MovingWorld {
       && normalFraction>=PHYSICS.wallMinNormalFraction;
     const availableWork=meaningful ? Math.max(0,coupledEnergy-PHYSICS.wallElasticEnergy-reserve) : 0;
     const remainingWork=before*workPerHealth;
-    const canFracture=wasCracked && meaningful && availableWork>=remainingWork;
+    const intactEnergy=Math.max(wall.game.maxHealth*PHYSICS.wallIntactEnergyPerHealth*resistanceScale,
+      PHYSICS.wallIntactMinEnergy*wall.game.maxHealth/PHYSICS.wallHealth);
+    const canFracture=meaningful && (wasCracked||coupledEnergy>=intactEnergy) && availableWork>=remainingWork;
     // A surviving panel can only receive crack work actually dissipated by the
     // passive rebound. Strong hits instead pay the whole remaining fracture
     // cost and pass through. Never credit the same energy to cracks and bounce.
     const dissipatedNormalEnergy=(1-pair.restitution*pair.restitution)*coupledEnergy;
-    // An intact panel retains a ligament after its first meaningful contact,
-    // even at extreme energy. This is a material state, not a fixed hit count:
-    // subsequent fresh blows still pay their measured remaining work, while
-    // weak/grazing/resting contacts cannot advance the crack state.
-    const firstDamageLimit=wasCracked ? Infinity : remainingWork*PHYSICS.wallFirstDamageFraction;
-    const damageWork=canFracture ? remainingWork : Math.min(availableWork,dissipatedNormalEnergy,firstDamageLimit);
+    // Strong enough real normal energy can nucleate a local opening on the
+    // first impact. Medium contacts spend only passive rebound loss on cracks.
+    const damageWork=canFracture ? remainingWork : Math.min(remainingWork,availableWork,dissipatedNormalEnergy);
     const damage=Math.min(before,damageWork/workPerHealth);
     wall.game.health=Math.max(0,before-damage);
     wall.game.lastHitEnergy=energy;wall.game.lastHitDamage=damage;
@@ -518,7 +544,7 @@ export class MovingWorld {
     wall.game.impact=intensity;
     const info={point,normal,velocity:{...velocity},angularVelocity,contactArm:arm,
       intensity,speed,energy,coupledEnergy,effectiveMass,damage,damageWork,remainingHealth:wall.game.health,
-      resistanceScale,workPerHealth,minimumImpactEnergy,normalFraction,meaningful,
+      resistanceScale,workPerHealth,minimumImpactEnergy,intactEnergy,normalFraction,meaningful,
       firstCrack:!wasCracked&&damage>0,
       bodyId:body.game.id,material:body.game.material,heavy:body.game.heavy,kind:body.game.kind,
       broken:wall.game.health<=.000001,fractureWork:0,exitSpeed:0,restitution:pair.restitution};

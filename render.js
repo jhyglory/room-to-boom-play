@@ -1,8 +1,10 @@
-import { WORLD } from './engine.js?v=0.12.0';
-import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.12.0';
+import { WORLD } from './engine.js?v=0.18.0';
+import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.18.0';
 
 const WIDTH = WORLD.width;
 const HEIGHT = WORLD.height;
+const ROOMS = WORLD.rooms;
+const CENTER_X = WIDTH / 2;
 
 const C = {
   ink: '#4a3b35',
@@ -83,6 +85,7 @@ export class GameRenderer {
     this.shake = null;
     this.effectTime = 0;
     this.wallDamageHints = new Map();
+    this.completedWallBreaks = new Set();
     this.scenery = null;
     this.lastNow = 0;
     this.bounds = { left: 0, top: 0, width: WIDTH, height: HEIGHT };
@@ -152,16 +155,23 @@ export class GameRenderer {
     const normal = info.normal || { x: 0, y: -1 };
     const magnitude = Math.hypot(normal.x, normal.y) || 1;
     const direction = { x: normal.x / magnitude, y: normal.y / magnitude };
-    const nearby = this.impacts.find(hit => hit.life > .2 && Math.hypot(hit.x - x, hit.y - y) < 38);
-    const size = (info.broken ? 60 : 18 + 34 * k) * unit;
+    const damaging = info.firstCrack || info.damage > 0 || info.damaged;
+    const key = info.sourceId || (info.bodyId ? `${info.bodyId}:${info.wallId || 'contact'}` : null);
+    const nearby = this.impacts.find(hit => hit.life > hit.maxLife - .07 &&
+      (key ? hit.sourceId === key : !hit.sourceId && Math.hypot(hit.x - x, hit.y - y) < 22));
+    // These are short contact cues, not a screen-covering explosion or a
+    // trajectory simulation. Only a real fracture gets plaster fragments.
+    const size = (info.broken ? 34 + 12 * k : damaging ? 17 + 18 * k : 8 + 13 * k) * unit;
     if (nearby) { nearby.size = Math.max(nearby.size, size); return nearby; }
-    const impact = { x, y, life: .22, maxLife: .22, size, rotation: Math.random() * Math.PI * 2,
-      referenceSpeed, sourceId: info.sourceId };
+    const life = info.broken ? .18 : damaging ? .16 : .12;
+    const impact = { x, y, life, maxLife: life, size, rotation: Math.random() * Math.PI * 2,
+      referenceSpeed, sourceId: key };
     this.impacts.push(impact);
     if (this.impacts.length > 14) this.impacts.shift();
-    this.addWallPowder({ x, y, direction, intensity: k }, 6 + Math.round(10 * k));
-    if (!this.shake || this.shake.life < .04 || k > this.shake.intensity) {
-      this.shake = { life: .12, maxLife: .12, amplitude: 2 + 6 * k, intensity: k,
+    this.addWallPowder({ x, y, direction, intensity: k }, info.broken ? 5 + Math.round(5 * k)
+      : damaging ? 3 + Math.round(5 * k) : 2 + Math.round(2 * k));
+    if (k > .2 && (!this.shake || this.shake.life < .04 || k > this.shake.intensity)) {
+      this.shake = { life: .08, maxLife: .08, amplitude: .6 + 2.1 * k, intensity: k,
         direction, seed: Math.random() * Math.PI * 2 };
     }
     return impact;
@@ -182,8 +192,10 @@ export class GameRenderer {
   addWallHit(wall, info = {}) {
     const hit = this.wallImpactInfo(wall, info);
     this.wallDamageHints ||= new Map();
-    this.wallDamageHints.set(wall.game?.id, { x: hit.x - wall.position.x, y: hit.y - wall.position.y });
-    this.addImpact(hit.x, hit.y, hit.referenceSpeed, { ...info, normal: info.normal || hit.direction });
+    if (info.firstCrack || info.damage > 0 || info.damaged)
+      this.wallDamageHints.set(wall.game?.id, { x: hit.x - wall.position.x, y: hit.y - wall.position.y });
+    return this.addImpact(hit.x, hit.y, hit.referenceSpeed, { ...info,
+      sourceId: `${info.bodyId || 'piece'}:${wall.game?.id || 'wall'}`, normal: info.normal || hit.direction });
   }
 
   addWallPowder(hit, count) {
@@ -200,8 +212,13 @@ export class GameRenderer {
   }
 
   addWallBreak(wall, info = {}) {
+    this.completedWallBreaks ||= new Set();
+    const key = wall.game?.id || wall;
+    if (this.completedWallBreaks.has(key)) return false;
+    this.completedWallBreaks.add(key);
     const hit = this.wallImpactInfo(wall, info);
-    this.addImpact(hit.x, hit.y, Math.max(3.21, hit.referenceSpeed), { ...info, broken: true, normal: info.normal || hit.direction });
+    this.addImpact(hit.x, hit.y, Math.max(3.21, hit.referenceSpeed), { ...info, broken: true,
+      sourceId: `${info.bodyId || 'piece'}:${wall.game?.id || 'wall'}`, normal: info.normal || hit.direction });
     this.particles.push({ x: hit.x, y: hit.y, vx: hit.direction.x * 38, vy: hit.direction.y * 38,
       life: .44, maxLife: .44, size: 68 + hit.intensity * 22, angle: (Math.random() - .5) * .28,
       spin: (Math.random() - .5) * 1.1, sprite: 'wall_debris' });
@@ -212,8 +229,9 @@ export class GameRenderer {
     this.addWallPowder(hit, 7 + Math.round(hit.intensity * 5));
     this.wallBreaks.push({ ...hit, life: .48, maxLife: .48, collapse: true });
     if (this.wallBreaks.length > 8) this.wallBreaks.shift();
-    this.shake = { life: .14, maxLife: .14, amplitude: 8, intensity: hit.intensity,
+    this.shake = { life: .1, maxLife: .1, amplitude: 3.2, intensity: hit.intensity,
       direction: hit.direction, seed: Math.random() * Math.PI * 2 };
+    return true;
   }
 
   clearEffects() {
@@ -224,6 +242,7 @@ export class GameRenderer {
     this.lastNow = 0;
     this.effectTime = 0;
     this.wallDamageHints?.clear();
+    this.completedWallBreaks?.clear();
   }
 
   draw(now = performance.now(), { phase = 'ready', reducedMotion = false } = {}) {
@@ -282,8 +301,7 @@ export class GameRenderer {
           const cached = canvas.getContext('2d');
           if (cached) {
             cached.scale(2, 2);
-            this.drawGround(cached); this.drawRoom(cached, 75, 34, 610, 386, true);
-            this.drawRoom(cached, 75, 500, 610, 360, false); this.drawSurroundings(cached);
+            this.drawGround(cached); this.drawStageRooms(cached); this.drawSurroundings(cached);
             this.scenery = canvas;
           }
         }
@@ -292,31 +310,38 @@ export class GameRenderer {
     }
     if (this.scenery) ctx.drawImage(this.scenery, 0, 0, WIDTH, HEIGHT);
     else {
-      this.drawGround(ctx); this.drawRoom(ctx, 75, 34, 610, 386, true);
-      this.drawRoom(ctx, 75, 500, 610, 360, false); this.drawSurroundings(ctx);
+      this.drawGround(ctx); this.drawStageRooms(ctx); this.drawSurroundings(ctx);
     }
   }
 
   drawGround(ctx) {
     ctx.fillStyle = '#faf4e7'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    rounded(ctx, 55, 20, 650, 875, 18, '#e9e8db', '#d5d5c3', 1);
-    rounded(ctx, 64, 431, 632, 58, 14, '#d8d9c3');
-    for (let i = 0; i < 10; i++) rounded(ctx, 72 + i * 62, 438, 52, 41, 7, '#f5f0dd', '#c9cbb4', 1);
+    const left = ROOMS.old.minX, right = ROOMS.old.maxX, width = right - left;
+    rounded(ctx, left - 18, 20, width + 36, HEIGHT - 45, 18, '#e9e8db', '#d5d5c3', 1);
+    // A quiet, light corridor makes a missing wall segment legible immediately
+    // after the brief dust clears, without a decorative rail in the passage.
+    rounded(ctx, left - 9, ROOMS.new.maxY + 9, width + 18,
+      ROOMS.old.minY - ROOMS.new.maxY - 18, 8, '#eee9d7', '#d6d0b9', 1);
+  }
+
+  drawStageRooms(ctx) {
+    for (const [name, room] of Object.entries(ROOMS))
+      this.drawRoom(ctx, room.minX, room.minY, room.maxX - room.minX, room.maxY - room.minY, name === 'new');
   }
 
   drawRoomPlacards(ctx) {
-    rounded(ctx, 255, 182, 250, 62, 13, '#e5efdaef');
-    referenceText(ctx, 'NEW HOME', 380, 210, 24, '#72926d', 900);
-    referenceText(ctx, 'LAND IT. LET IT SETTLE.', 380, 231, 10, '#779071', 800, 1.1);
-    // Ten-piece play retains the layout-guide bookcase down to y=837. A
-    // 10-unit label adjustment avoids its edge without moving any furniture.
-    referenceText(ctx, 'OLD HOME', 380, 847, 15, '#916e49', 800, 1.4);
+    rounded(ctx, CENTER_X - 79, ROOMS.new.minY + 13, 158, 29, 9, '#e5efdae8');
+    referenceText(ctx, 'NEW HOME', CENTER_X, ROOMS.new.minY + 34, 18, '#5e805d', 900);
+    referenceText(ctx, 'OLD HOME', CENTER_X, ROOMS.old.maxY + 36, 15, '#916e49', 800, 1.4);
   }
 
   drawWeakWallMarkers(ctx) {
     if (!(this.world.walls || []).some(wall => wall.game?.weak && !wall.game.broken && !wall.game.hidden)) return;
-    rounded(ctx, 137, 451, 169, 27, 8, '#fff2db', '#e1bf8a', 1);
-    referenceText(ctx, 'CRACKS = SHORTCUT', 221.5, 469, 10, '#a1764c', 900, .7);
+    // The hint stays beside the central door instead of covering its aiming
+    // line; wall art itself carries the persistent intact/cracked/broken state.
+    const x = (ROOMS.old.minX + WORLD.doorway.minX) / 2;
+    rounded(ctx, x - 64, 450, 128, 23, 7, '#fff2dbd9', '#e1bf8a', 1);
+    referenceText(ctx, 'WALLS = SHORTCUTS', x, 466, 10, '#a1764c', 900, .2);
   }
 
   drawRoom(ctx, x, y, w, h, isNew) {
@@ -327,15 +352,17 @@ export class GameRenderer {
       const cover = Math.max(w / spec.width, h / spec.height) * 1.5;
       const fw = spec.width * cover, fh = spec.height * cover;
       ctx.drawImage(floor, x + (w - fw) / 2, y + (h - fh) / 2, fw, fh);
+      ctx.save(); ctx.globalAlpha = .13;
+      ctx.fillStyle = isNew ? '#e7f1dd' : '#fff1d9'; ctx.fillRect(x, y, w, h); ctx.restore();
     }
     else rounded(ctx, x, y, w, h, 0, isNew ? '#dce8d5' : '#edddc4');
     if (isNew) {
       const area = WORLD.delivery;
       rounded(ctx, area.minX, area.minY, area.maxX - area.minX, area.maxY - area.minY, 0, '#e2f4d805');
-      // This inset outline is the supplied decorative goal hint. The full
-      // physical delivery rule remains WORLD.delivery, including edge cases.
-      ctx.setLineDash([11, 10]);
-      rounded(ctx, 95, 54, 570, 337, 14, null, '#89a986', 2);
+      // This line marks the actual whole-body destination boundary. It has no
+      // inset rounded corners that would imply a second delivery rule.
+      ctx.setLineDash([8, 8]);
+      rounded(ctx, area.minX, area.minY, area.maxX - area.minX, area.maxY - area.minY, 0, null, '#89a986', 1.4);
       ctx.setLineDash([]);
     }
     ctx.restore();
@@ -344,9 +371,10 @@ export class GameRenderer {
   drawRoute(ctx, now) {
     ctx.save();
     ctx.setLineDash([6, 7]);
-    stroke(ctx, [[380, 493], [380, 433]], '#84a18a', 3);
+    const x = WORLD.doorway.centerX;
+    stroke(ctx, [[x, 480], [x, 442]], '#84a18a', 2.5);
     ctx.setLineDash([]);
-    stroke(ctx, [[370, 445], [380, 433], [390, 445]], '#84a18a', 3);
+    stroke(ctx, [[x - 8, 452], [x, 442], [x + 8, 452]], '#84a18a', 2.5);
     ctx.restore();
   }
 
@@ -477,41 +505,41 @@ export class GameRenderer {
     ctx.save();
     if (ctx === this.ctx) ctx.setTransform(this.scale, 0, 0, this.scale, this.offsetX, this.offsetY);
     this.drawGround(ctx);
-    this.drawRoom(ctx, 75, 34, 610, 386, true);
-    this.drawRoom(ctx, 75, 500, 610, 360, false);
-    text(ctx, 'V2 REGISTERED WALL / FLOOR CALIBRATION', 380, 65, 16, '#49362e', 900);
-    text(ctx, 'Red = unchanged collider · blue = fully cleared 152-unit physical gap', 380, 90, 10, '#84735f', 700);
+    this.drawStageRooms(ctx);
+    text(ctx, 'REGISTERED WALL / FLOOR CALIBRATION', CENTER_X, 65, 14, '#49362e', 900);
+    text(ctx, 'Red = collider · blue = cleared physical gap', CENTER_X, 90, 10, '#84735f', 700);
     for (const [row, mode] of ['intact', 'cracked', 'broken'].entries()) {
       const y = 174 + row * 125;
-      const walls = Array.from({ length: 8 }, (_, index) => ({ position: { x: 114 + index * 76, y }, game: {
-        id: `demo-${row}:${index}`, w: 76, h: 18, health: mode === 'cracked' ? 1 : 2, maxHealth: 2,
+      const segment = (ROOMS.old.maxX - ROOMS.old.minX) / 8;
+      const walls = Array.from({ length: 8 }, (_, index) => ({ position: { x: ROOMS.old.minX + (index + .5) * segment, y }, game: {
+        id: `demo-${row}:${index}`, w: segment, h: 18, health: mode === 'cracked' ? 1 : 2, maxHealth: 2,
         broken: mode === 'broken' && (index === 3 || index === 4),
       } }));
       for (const wall of walls) this.drawWall(ctx, wall, { walls });
       if (showColliders) {
         for (const wall of walls) if (!wall.game.broken)
-          rounded(ctx, wall.position.x - 38, y - 9, 76, 18, 0, null, '#d0634b', 1.2);
-        if (mode === 'broken') rounded(ctx, 304, y - 28, 152, 56, 0, null, '#6298b6', 1.2);
+          rounded(ctx, wall.position.x - segment/2, y - 9, segment, 18, 0, null, '#d0634b', 1.2);
+        if (mode === 'broken') rounded(ctx, CENTER_X - segment, y - 28, segment * 2, 56, 0, null, '#6298b6', 1.2);
       }
       text(ctx, mode.toUpperCase() + (mode === 'broken' ? ' · TWO INDEPENDENT END STUBS' : ' · CONNECTED STRIP / COMMON HEIGHT 34'),
-        380, y - 42, 10, '#49362e', 800);
+        CENTER_X, y - 42, 9, '#49362e', 800);
     }
-    for (const [x, angle] of [[105, -Math.PI / 2], [655, Math.PI / 2]]) {
+    for (const [x, angle] of [[ROOMS.old.minX + 30, -Math.PI / 2], [ROOMS.old.maxX - 30, Math.PI / 2]]) {
       const wall = { position: { x, y: 650 }, game: { id: `vertical-${x}`, w: 18, h: 152, health: 2, maxHealth: 2 } };
       this.drawWall(ctx, wall, { walls: [wall] });
       if (showColliders) rounded(ctx, x - 9, 574, 18, 152, 0, null, '#d0634b', 1.2);
     }
-    for (const [id, x, y] of [['sofa', 365, 700], ['fridge', 200, 630]]) {
+    for (const [id, x, y] of [['sofa', CENTER_X + 20, 700], ['fridge', CENTER_X - 95, 630]]) {
       const spec = ASSET_SPECS[id];
       ctx.save(); ctx.translate(x, y); this.drawRegisteredSprite(ctx, id);
       if (showColliders) rounded(ctx, -spec.body.width / 2, -spec.body.height / 2, spec.body.width, spec.body.height, 0, null, '#d0634b', 1.2);
       ctx.restore();
     }
     const debris = this.getAsset('wall_debris');
-    if (debris) ctx.drawImage(debris, 520, 705, 82, 82);
-    text(ctx, 'V2 actual PNGs · full furniture frames · uniform floor cover × 1.5', 380, 815, 10, '#84735f', 700);
-    text(ctx, 'Current two-row physics stays unchanged. The package proof is an art reference.', 380, 840, 9, '#84735f', 700);
-    text(ctx, 'Vertical wall lighting rotates with its source image; room_frame is not overlaid.', 380, 865, 9, '#84735f', 700);
+    if (debris) ctx.drawImage(debris, CENTER_X + 85, 705, 82, 82);
+    text(ctx, 'Original PNGs · full furniture frames · uniform floor cover × 1.5', CENTER_X, 815, 9, '#84735f', 700);
+    text(ctx, 'v18 shared portrait geometry · removed colliders open their full gap', CENTER_X, 840, 8, '#84735f', 700);
+    text(ctx, 'Vertical walls rotate their source lighting; no decorative frame overlay.', CENTER_X, 865, 8, '#84735f', 700);
     ctx.restore();
   }
 
@@ -521,13 +549,13 @@ export class GameRenderer {
     ctx.save();
     if (ctx === this.ctx) ctx.setTransform(this.scale, 0, 0, this.scale, this.offsetX, this.offsetY);
     ctx.fillStyle = '#faf4e7'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    text(ctx, 'FURNITURE · ALL 16 ORIGINAL PNGs', 380, 33, 18, '#49362e', 900);
-    text(ctx, '1:1 world scale · authored uniform registration · original full frames', 380, 57, 10, '#84735f', 700);
-    text(ctx, 'Red = collider / pivot · green = alpha ≥ 220 · blue = 12-unit pick tolerance', 380, 77, 9, '#84735f', 700);
+    text(ctx, 'FURNITURE · ALL 16 ORIGINAL PNGs', CENTER_X, 33, 16, '#49362e', 900);
+    text(ctx, 'Portrait world · uniform registration · original full frames', CENTER_X, 57, 9, '#84735f', 700);
+    text(ctx, 'Red = collider · green = alpha ≥ 220 · blue = pick tolerance', CENTER_X, 77, 8.5, '#84735f', 700);
     for (const [index, id] of FURNITURE_ASSET_IDS.entries()) {
       const spec = ASSET_SPECS[id];
       const bounds = furnitureVisualBounds(id);
-      const x = 110 + index % 4 * 180, y = 150 + Math.floor(index / 4) * 200;
+      const x = WIDTH / 4 * (index % 4 + .5), y = 150 + Math.floor(index / 4) * 200;
       const { width: w, height: h } = spec.body;
       ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
       this.drawRegisteredSprite(ctx, id);
@@ -549,13 +577,13 @@ export class GameRenderer {
       }
       ctx.restore();
       text(ctx, id.replaceAll('_', ' ').toUpperCase(), x, y + 76, 11, '#49362e', 900);
-      text(ctx, `BODY ${w} × ${h} · ART ${(bounds.maxX - bounds.minX).toFixed(1)} × ${(bounds.maxY - bounds.minY).toFixed(1)}`,
+      text(ctx, `BODY ${Number(w.toFixed(1))} × ${Number(h.toFixed(1))} · ART ${(bounds.maxX - bounds.minX).toFixed(1)} × ${(bounds.maxY - bounds.minY).toFixed(1)}`,
         x, y + 94, 8.5, '#84735f', 700);
       text(ctx, `PIVOT ${spec.pivot.x}, ${spec.pivot.y} · SCALE ${spec.scale.toFixed(5)}`,
         x, y + 108, 7.5, '#84735f', 700);
     }
-    text(ctx, 'Diagnostic art bounds do not crop PNGs or change collision / delivery geometry.', 380, 887, 9, '#84735f', 700);
-    text(ctx, 'V2 art registration preserves each collider; the bookcase has an explicitly narrower authored draw.', 380, 906, 8.5, '#84735f', 700);
+    text(ctx, 'Overlays are diagnostics; collision and delivery rules stay authoritative.', CENTER_X, 887, 8, '#84735f', 700);
+    text(ctx, 'Bookcase uses the near-square footprint of its supplied PNG.', CENTER_X, 906, 8.5, '#84735f', 700);
     ctx.restore();
   }
 
@@ -578,25 +606,33 @@ export class GameRenderer {
     ctx.restore();
     ellipse(ctx, end.x, end.y, 5, 5, '#386d51');
     if (power > .02) {
-      const length = 37 + power * 101;
+      // The short solid arrow only indicates direction. It deliberately makes
+      // no promise about a future bounce, stopping point or wall breakthrough.
+      const angle = body.angle || 0;
+      const localX = vector.x * Math.cos(angle) + vector.y * Math.sin(angle);
+      const localY = -vector.x * Math.sin(angle) + vector.y * Math.cos(angle);
+      const exit = Math.min((body.game?.w || 50) / 2 / Math.max(.0001, Math.abs(localX)),
+        (body.game?.h || 50) / 2 / Math.max(.0001, Math.abs(localY)));
+      const start = exit + 7, length = start + 24 + power * 25;
       const tip = { x: center.x + vector.x * length, y: center.y + vector.y * length };
-      const tail = { x: center.x + vector.x * 19, y: center.y + vector.y * 19 };
-      const back = { x: tip.x - vector.x * 16, y: tip.y - vector.y * 16 };
-      const points = [[back.x - vector.y * 11, back.y + vector.x * 11], [tip.x, tip.y], [back.x + vector.y * 11, back.y - vector.x * 11]];
+      const tail = { x: center.x + vector.x * start, y: center.y + vector.y * start };
+      const back = { x: tip.x - vector.x * 11, y: tip.y - vector.y * 11 };
+      const points = [[back.x - vector.y * 8, back.y + vector.x * 8], [tip.x, tip.y], [back.x + vector.y * 8, back.y - vector.x * 8]];
       ctx.save(); ctx.shadowColor = '#93ffcd'; ctx.shadowBlur = 13;
       stroke(ctx, [[tail.x, tail.y], [tip.x, tip.y]], '#4f9d78', 12);
       stroke(ctx, points, '#4f9d78', 12);
       stroke(ctx, [[tail.x, tail.y], [tip.x, tip.y]], '#b9ffda', 7);
       stroke(ctx, points, '#b9ffda', 7);
       ctx.restore();
-      const meterX = Math.max(103, Math.min(657, end.x));
-      const meterY = Math.max(39, Math.min(889, end.y + 25));
-      rounded(ctx, meterX - 37, meterY - 8, 74, 16, 6, '#34634d', '#e6ffe8', 1.5);
-      rounded(ctx, meterX - 33, meterY - 4, Math.max(2, 66 * power), 8, 3,
-        gradient(ctx, meterX - 33, meterY - 4, 0, 8, power > .8 ? ['#ecffc1', '#8fd594'] : ['#c0f5cd', '#76b88b']));
     }
-    rounded(ctx, 251, 441, 258, 34, 11, '#fff2dbe8', '#b9976b', 1.5);
-    text(ctx, power > .02 ? 'RELEASE TO LAUNCH' : 'PULL BACK TO AIM', 380, 458, 12, '#6f573d', 900);
+    const meterX = Math.max(55, Math.min(WIDTH - 55, end.x));
+    const offset = power > .02 ? (end.y >= center.y ? -30 : 30) : (body.game?.h || 50) / 2 + 22;
+    const meterY = Math.max(26, Math.min(HEIGHT - 38, end.y + offset));
+    rounded(ctx, meterX - 37, meterY - 8, 74, 16, 6, '#34634d', '#e6ffe8', 1.5);
+    rounded(ctx, meterX - 33, meterY - 4, Math.max(2, 66 * power), 8, 3,
+      gradient(ctx, meterX - 33, meterY - 4, 0, 8, power > .8 ? ['#ecffc1', '#8fd594'] : ['#c0f5cd', '#76b88b']));
+    text(ctx, power > .02 ? `RELEASE · ${Math.round(power * 100)}%` : 'PULL BACK',
+      meterX, meterY + 21, 13, '#34634d', 900);
   }
 
   drawFurniture(ctx, body, selected, now) {
@@ -638,7 +674,7 @@ export class GameRenderer {
     } else if (body.position.y <= WORLD.delivery.maxY && g.deliveryProtrusion > 0) {
       label = 'EDGE OUTSIDE';
     }
-    const x = Math.max(104, Math.min(656, body.position.x));
+    const x = Math.max(104, Math.min(WIDTH - 104, body.position.x));
     const y = Math.max(58, Math.min(874, body.position.y - g.h / 2 - 22));
     rounded(ctx, x - 91, y - 13, 182, 26, 8, '#fff8e9f2', color, 1.5);
     text(ctx, label, x, y, 10, color, 800);
