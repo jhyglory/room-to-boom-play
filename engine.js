@@ -60,7 +60,9 @@ export const FLOOR_DAMPING = Object.freeze({
 // These are authored top-down profiles, not measured SI coefficients.
 export const GLIDE_PROFILES = Object.freeze({
   sofa: Object.freeze({ floorDamping: .012 }),
-  bed: Object.freeze({ floorDamping: .020 }),
+  // Broad upholstery/wardrobe feet still stop sooner than light props. Their
+  // ordinary air drag leaves room for a useful pull between the two rooms.
+  bed: Object.freeze({ floorDamping: .020, frictionAir: .040 }),
   fridge: Object.freeze({ floorDamping: .040 }),
   bookcase: Object.freeze({ floorDamping: .010 }),
   table: Object.freeze({ floorDamping: .0055 }),
@@ -70,7 +72,7 @@ export const GLIDE_PROFILES = Object.freeze({
   lamp: Object.freeze({ floorDamping: .001 }),
   plant: Object.freeze({ floorDamping: .0075 }),
   armchair: Object.freeze({ floorDamping: .010 }),
-  wardrobe: Object.freeze({ floorDamping: .020 }),
+  wardrobe: Object.freeze({ floorDamping: .020, frictionAir: .040 }),
   dresser: Object.freeze({ floorDamping: .014 }),
   tv_stand: Object.freeze({ floorDamping: .0055 }),
   desk: Object.freeze({ floorDamping: .009 }),
@@ -247,9 +249,12 @@ export class MovingWorld {
     wall('old-bottom-left',64,500,52,18);
     wall('old-weak',140,500,100,18,true);
     wall('old-bottom-right',406,500,152,18);
-    wall('new-top-left',114,420,152,18);
-    wall('new-weak',380,420,100,18,true);
-    wall('new-top-right',456,420,52,18);
+    // Both weak runs meet the same side of the open doorway. Each contacted
+    // panel must still fracture separately, but the route continues upstairs
+    // instead of ending at the neighboring normal-strength wall row.
+    wall('new-top-left',64,420,52,18);
+    wall('new-weak',140,420,100,18,true);
+    wall('new-top-right',406,420,152,18);
     wall('new-left',47,227,18,404);
     wall('new-right',473,227,18,404);
     wall('new-bottom',260,34,444,18);

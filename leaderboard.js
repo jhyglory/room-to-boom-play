@@ -1,4 +1,4 @@
-import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.19.0';
+import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.21.0';
 
 const PLAYER_KEY = 'room-to-boom:player-id';
 const NAME_KEY = 'room-to-boom:nickname';

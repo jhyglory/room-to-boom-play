@@ -1,10 +1,10 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.20.0';
-import { GameRenderer } from './render.js?v=0.20.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.21.0';
+import { GameRenderer } from './render.js?v=0.21.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.19.0';
+import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.21.0';
 import { GameAudio } from './audio.js?v=0.18.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.19.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.21.0';
 import { LEADERBOARD_MODE } from './runtime-config.js?v=0.19.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -56,6 +56,7 @@ let resultSeconds = null;
 let runVersion = 0;
 let pointerId = null;
 let pointerTransform = null;
+let caughtMovingPiece = false;
 let controlsAreDesktop = null;
 let lastFrame = performance.now();
 let accumulator = 0;
@@ -73,11 +74,31 @@ let leaderboardSyncing = false;
 const diagnosticImpacts=[];
 const itemNames = Object.fromEntries(FURNITURE.map(item=>[item.id,item.name]));
 const STEP = PHYSICS.stepMs;
+const COACH_KEY = 'room-to-boom:coach:shortcuts16-v21';
+const seenCoach = new Set((readSetting(COACH_KEY)||'').split(',').filter(Boolean));
+let coachUntil = 0;
 // Keep reference-world speed units, then add the real material and mass
 // context so each contact has an audible character and impact strength.
 const REFERENCE_WORLD_SCALE = 760 / 540; // Keep physical audio units independent of the portrait camera.
 
 function announce(message){$('announcer').textContent=message;}
+function showCoach(id,title,message,duration=5000){
+  if(phase!=='playing'||seenCoach.has(id))return;
+  seenCoach.add(id);saveSetting(COACH_KEY,[...seenCoach].join(','));
+  $('control-coach-title').textContent=title;
+  $('control-coach-copy').textContent=message;
+  $('control-coach').hidden=false;
+  coachUntil=performance.now()+duration;
+}
+function updateCoach(now){
+  if(phase!=='playing'||now>=coachUntil)$('control-coach').hidden=true;
+}
+function hasConnectedShortcut(){
+  const lower=world.walls.filter(w=>w.game.weak&&w.game.broken&&Math.abs(w.position.y-WORLD.rooms.old.minY)<1);
+  const upper=world.walls.filter(w=>w.game.weak&&w.game.broken&&Math.abs(w.position.y-WORLD.rooms.new.maxY)<1);
+  return lower.some(a=>upper.some(b=>Math.min(a.position.x+a.game.w/2,b.position.x+b.game.w/2)
+    -Math.max(a.position.x-a.game.w/2,b.position.x-b.game.w/2)>=44));
+}
 function updateBest(){
   $('best-time').textContent=best===null?'—':`${best.toFixed(2)}s`;
   $('best-time').classList.toggle('long-time',best!==null&&best>=100);
@@ -154,6 +175,7 @@ function updateDeliveryHint(now){
 function isRankingScreen(){return phase==='complete'||phase==='rankings';}
 function showPhase(){
   document.body.setAttribute('data-phase',phase);
+  updateCoach(performance.now());
   syncSettingsLayout();
   if(phase!=='playing'&&!window.matchMedia('(min-width: 740px)').matches)$('game-settings').open=false;
   $('start-overlay').classList.toggle('hidden',phase!=='menu');
@@ -175,7 +197,7 @@ function release(){
   world.release();
   canvas.classList.remove('dragging');
   const captured=pointerId;
-  pointerId=null;pointerTransform=null;
+  pointerId=null;pointerTransform=null;caughtMovingPiece=false;
   if(captured!==null){
     try{if(canvas.hasPointerCapture(captured))canvas.releasePointerCapture(captured);}catch{}
   }
@@ -193,7 +215,7 @@ function start(){
 function reset(){
   clearResult();audio.cancelPending();
   release();world.reset();diagnosticImpacts.length=0;clock.reset();renderer.clearEffects();impactPresentation.clear();
-  accumulator=0;lastFrame=performance.now();phase='playing';lastItemId=null;hintUntil=0;nextHintUpdate=0;
+  accumulator=0;lastFrame=performance.now();phase='playing';lastItemId=null;hintUntil=0;nextHintUpdate=0;coachUntil=0;
   activateSound('enable',{resume:true});
   updateProgress();updateTimer(performance.now());showPhase();
   $('live-hint').textContent='Fresh start. Same beautiful chaos.';
@@ -378,7 +400,10 @@ world.onBreak = (wall, info = {}) => {
   impactPresentation.hit(performance.now(),{...info,broken:true},reducedMotion);
   hintUntil=performance.now()+1200;
   $('live-hint').textContent='CRASH! Keep going — every wall can break.';
-  announce('Wall smashed. A new way through is open.');
+  if(hasConnectedShortcut()){
+    showCoach('shortcut','A WIDER ROUTE IS OPEN','Line up the next piece with this opening.',4500);
+    announce('A wider route connects both rooms. Line up the next piece.');
+  }else announce('Wall smashed. Widen the opening to make a shortcut.');
 };
 world.onWallHit = (wall, info = {}) => {
   if(info.broken)return;
@@ -408,12 +433,13 @@ canvas.addEventListener('pointerdown',event=>{
   const transform=renderer.screenTransform();
   const point=renderer.screenToWorld(event.clientX,event.clientY,transform);
   const touch=event.pointerType==='touch'||event.pointerType==='pen';
+  const movingIds=new Set(world.bodies.filter(b=>{const v=world.M.Body.getVelocity(b);return Math.hypot(v.x,v.y)>.75;}).map(b=>b.game.id));
   const body=world.grab(point.x,point.y,touch?{minTargetSize:48/renderer.cssScale,hitSlop:0}:undefined);
   if(body&&!window.matchMedia('(min-width: 740px)').matches)$('game-settings').open=false;
   if(!body)return;
   lastItemId=body.game.id;
   activateSound('grab');
-  event.preventDefault();pointerId=event.pointerId;pointerTransform=transform;
+  event.preventDefault();pointerId=event.pointerId;pointerTransform=transform;caughtMovingPiece=movingIds.has(body.game.id);
   try{canvas.setPointerCapture(pointerId);}catch(error){if(!completionQA)throw error;}
   canvas.classList.add('dragging');clock.start(performance.now());
   hintUntil=performance.now()+700;
@@ -421,6 +447,8 @@ canvas.addEventListener('pointerdown',event=>{
     body.game.mass>=45?'Heavy and stubborn. Give it room and a stronger pull.':
     'Pull back, release, and leave room for the rebound.';
   $('board-hint').style.display='none';$('live-hint').textContent=`${body.game.name}. ${feel}`;
+  if(caughtMovingPiece)showCoach('caught','CAUGHT!','Release without pulling to leave it stopped.',4500);
+  else if(body.game.mass>=45)showCoach('grip','CHOOSE YOUR GRIP','Center for distance. Edge for spin.',5500);
 });
 canvas.addEventListener('pointermove',event=>{
   if(event.pointerId!==pointerId||phase!=='playing')return;
@@ -435,13 +463,16 @@ canvas.addEventListener('pointerup',event=>{
   const point=renderer.screenToWorld(event.clientX,event.clientY,pointerTransform);
   world.movePointer(point.x,point.y);
   const launchedBody=world.grabbed;
+  const wasCaught=caughtMovingPiece;
   const launched=world.launch();
   if(launched&&launchedBody){
     const v=world.M.Body.getVelocity(launchedBody);
     audio.launch(Math.hypot(v.x,v.y)/REFERENCE_WORLD_SCALE,{material:launchedBody.game.material,heavy:launchedBody.game.heavy,kind:launchedBody.game.kind});
   }
   release();hintUntil=performance.now()+700;
-  $('live-hint').textContent=launched?'Nice launch. Grab again to adjust your route.':'Pull farther back, then release to launch.';
+  $('live-hint').textContent=launched?'Catch a rebound: tap moving furniture to stop it.':
+    wasCaught?'Stopped. Leave the whole piece inside NEW HOME to settle.':'Pull farther back, then release to launch.';
+  if(launched)showCoach('catch','CATCH THE REBOUND','Tap moving furniture to stop it.',5000);
 });
 canvas.addEventListener('pointercancel',event=>{if(event.pointerId===pointerId){advanceSimulation(performance.now());release();}});
 canvas.addEventListener('lostpointercapture',event=>{if(event.pointerId===pointerId){advanceSimulation(performance.now());release();}});
@@ -564,7 +595,7 @@ function advanceSimulation(now){
 }
 function frame(now){
   now=advanceSimulation(now);
-  if(phase==='playing'){updateTimer(now);updateDeliveryHint(now);}
+  if(phase==='playing'){updateTimer(now);updateDeliveryHint(now);updateCoach(now);}
   if(impactPresentation.shouldDraw(now,{phase,reducedMotion,aiming:!!world.grabbed}))
     renderer.draw(now,{phase,reducedMotion});
   requestAnimationFrame(frame);

@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js';
+import { TOTAL_FURNITURE } from './engine.js?v=0.21.0';
 
-// Bounded post-fracture heavy carry defines a new ruleset; older best keys remain intact.
-export const STAGE = 'studio-breakthrough16-v19';
+// Aligned wall shortcuts and retuned heavy glide define a new ruleset; older best keys remain intact.
+export const STAGE = 'studio-shortcuts16-v21';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

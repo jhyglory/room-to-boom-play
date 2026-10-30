@@ -140,6 +140,11 @@ canvas.dragging { cursor: grabbing; }
 .manual-share input { display: block; width: 100%; min-height: 44px; margin-top: 5px; padding: 9px; border: 1px solid var(--rtb-border); border-radius: 8px; font: inherit; background: var(--rtb-surface); color: var(--rtb-text); }
 .challenge-result { font-weight: 900 !important; color: var(--rtb-accent) !important; }
 .sr-only, .board-hint { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.control-coach { position: absolute; top: 12%; left: 50%; transform: translateX(-50%); width: min(290px, calc(100% - 28px)); padding: 9px 11px; border: 1px solid #b9ccb0; border-radius: 12px; background: #fff9e8ed; color: #34634d; box-shadow: 0 3px 8px #49362e12; text-align: center; pointer-events: none; z-index: 4; }
+.control-coach[hidden] { display: none; }
+.control-coach strong { display: block; font-size: 11px; line-height: 15px; letter-spacing: .6px; font-weight: 900; }
+.control-coach span { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; font-weight: 800; }
+.control-help { margin: 8px 2px; color: var(--rtb-text-muted); font-size: 11px; line-height: 16px; font-weight: 700; }
 dialog { max-width: 380px; width: calc(100% - 32px); border: 1px solid var(--rtb-border); border-radius: var(--rtb-radius-card); background: var(--rtb-surface); padding: 24px; color: var(--rtb-text); box-shadow: 0 15px 70px #49362E44; }
 dialog::backdrop { background: #49362E66; backdrop-filter: blur(2px); }
 dialog h2 { font-family: 'Fredoka', sans-serif; font-size: 24px; line-height: 28px; margin: 10px 0; }

@@ -1,5 +1,5 @@
-import { WORLD } from './engine.js?v=0.20.0';
-import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.20.0';
+import { WORLD } from './engine.js?v=0.21.0';
+import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.21.0';
 import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.18.0';
 
 const WIDTH = WORLD.width;
@@ -366,12 +366,19 @@ export class GameRenderer {
   }
 
   drawWeakWallMarkers(ctx) {
-    if (!(this.world.walls || []).some(wall => wall.game?.weak && !wall.game.broken && !wall.game.hidden)) return;
-    // The hint stays beside the central door instead of covering its aiming
-    // line; wall art itself carries the persistent intact/cracked/broken state.
-    const x = (ROOMS.old.minX + WORLD.doorway.minX) / 2;
-    rounded(ctx, x - 64, 450, 128, 23, 7, '#fff2dbd9', '#e1bf8a', 1);
-    referenceText(ctx, 'WALLS = SHORTCUTS', x, 466, 10, '#a1764c', 900, .2);
+    const unit = Math.max(.2, this.cssScale || 1);
+    ctx.save(); ctx.setLineDash([5 / unit, 5 / unit]);
+    for (const wall of this.world.walls || []) {
+      const g = wall.game;
+      if (!g?.weak || g.hidden || g.broken || g.cracked || !g.w || !g.h || g.health < g.maxHealth) continue;
+      // A gold dash is an intact weakness marker, not a painted crack. It sits
+      // on the real panel and disappears when damage exposes the crack art.
+      // No badge remains floating across the newly opened shortcut corridor.
+      const horizontal = g.w >= g.h, inset = Math.min(8, Math.max(g.w, g.h) / 4);
+      const dx = horizontal ? g.w / 2 - inset : 0, dy = horizontal ? 0 : g.h / 2 - inset;
+      stroke(ctx, [[wall.position.x - dx, wall.position.y - dy], [wall.position.x + dx, wall.position.y + dy]], '#b88b39', 2.2 / unit);
+    }
+    ctx.restore();
   }
 
   drawRoom(ctx, x, y, w, h, isNew) {
@@ -617,12 +624,51 @@ export class GameRenderer {
     ctx.restore();
   }
 
+  gripCue(body, aim) {
+    const local = this.world.anchor || { x: 0, y: 0 };
+    const angle = body.angle || 0, c = Math.cos(angle), s = Math.sin(angle);
+    const arm = { x: (local.x || 0) * c - (local.y || 0) * s,
+      y: (local.x || 0) * s + (local.y || 0) * c };
+    const center = body.position, w = body.game?.w || 50, h = body.game?.h || 50;
+    const lever = (arm.x * aim.vector.y - arm.y * aim.vector.x) / (Math.hypot(aim.vector.x, aim.vector.y) || 1);
+    const edge = Math.hypot(arm.x, arm.y) > Math.max(2, Math.min(w, h) * .1);
+    const spin = aim.power > .02 && Math.abs(lever) > Math.max(2, Math.min(w, h) * .12) ? Math.sign(lever) : 0;
+    return { center, arm, point: { x: center.x + arm.x, y: center.y + arm.y }, edge, spin,
+      caption: spin ? 'EDGE · SPIN' : edge ? 'EDGE GRIP' : 'CENTER GRIP',
+      uiScale: Math.max(.2, this.cssScale || 1) };
+  }
+
+  drawGripCue(ctx, body, cue) {
+    const { center, point, arm, edge, spin, uiScale: unit } = cue;
+    if (edge) {
+      ctx.save(); ctx.setLineDash([3 / unit, 3 / unit]);
+      stroke(ctx, [[center.x, center.y], [point.x, point.y]], '#b9864f', 1.4 / unit);
+      ctx.restore();
+    }
+    // The small white center and amber physical grip are static geometry,
+    // including in Less Motion. Expanded touch hits may have a different
+    // pointer origin; this ring marks the actual clamped launch anchor.
+    ellipse(ctx, point.x, point.y, 6 / unit, 6 / unit, edge ? '#f7cb7b' : null, '#8b572e', 2 / unit);
+    ellipse(ctx, center.x, center.y, 3 / unit, 3 / unit, '#fff9ec', '#356b54', 1.4 / unit);
+    if (!spin) return;
+    const radius = Math.max(12 / unit, Math.min(body.game?.w || 50, body.game?.h || 50) * .34);
+    const from = Math.atan2(arm.y, arm.x) + spin * .22, to = from + spin * Math.PI * .55;
+    ctx.beginPath(); ctx.arc(center.x, center.y, radius, from, to, spin < 0);
+    ctx.strokeStyle = '#a9653d'; ctx.lineWidth = 2 / unit; ctx.stroke();
+    const tip = { x: center.x + Math.cos(to) * radius, y: center.y + Math.sin(to) * radius };
+    const tangent = { x: -Math.sin(to) * spin, y: Math.cos(to) * spin };
+    const back = { x: tip.x - tangent.x * 6 / unit, y: tip.y - tangent.y * 6 / unit };
+    stroke(ctx, [[back.x - tangent.y * 3.5 / unit, back.y + tangent.x * 3.5 / unit],
+      [tip.x, tip.y], [back.x + tangent.y * 3.5 / unit, back.y - tangent.x * 3.5 / unit]], '#a9653d', 2 / unit);
+  }
+
   drawAim(ctx, body) {
     const aim = this.world.aim;
     if (!aim) return;
     const { origin, pull, vector, power } = aim;
     const center = aim.center || body.position;
     const end = { x: origin.x + pull.x, y: origin.y + pull.y };
+    const cue = this.gripCue(body, aim), unit = cue.uiScale;
     // The band shows the pull; the arrow shows the opposite launch direction.
     stroke(ctx, [[origin.x, origin.y], [end.x, end.y]], '#3b6e56', 7);
     stroke(ctx, [[origin.x, origin.y], [end.x, end.y]], '#d4ffe4', 3.5);
@@ -633,8 +679,31 @@ export class GameRenderer {
     }
     ctx.save(); ctx.shadowColor = '#75ffd2'; ctx.shadowBlur = 11;
     ellipse(ctx, end.x, end.y, 11, 11, '#f2fff0', '#7aefbd', 3);
-    ctx.restore();
-    ellipse(ctx, end.x, end.y, 5, 5, '#386d51');
+    ctx.restore(); ellipse(ctx, end.x, end.y, 5, 5, '#386d51');
+    const view = this.view || { minX: 0, minY: 0, maxX: WIDTH, maxY: HEIGHT };
+    const panelW = Math.min(116 / unit, view.maxX - view.minX - 8 / unit), panelH = 44 / unit, padding = 4 / unit;
+    const halfW = panelW / 2, halfH = panelH / 2;
+    const clampX = x => Math.max(view.minX + halfW + padding, Math.min(view.maxX - halfW - padding, x));
+    const clampY = y => Math.max(view.minY + halfH + padding, Math.min(view.maxY - halfH - padding, y));
+    const angle = body.angle || 0, w = body.game?.w || 50, h = body.game?.h || 50;
+    const ex = Math.abs(Math.cos(angle)) * w / 2 + Math.abs(Math.sin(angle)) * h / 2;
+    const ey = Math.abs(Math.sin(angle)) * w / 2 + Math.abs(Math.cos(angle)) * h / 2;
+    const side = end.y >= center.y ? 1 : -1;
+    const candidates = [
+      { x: clampX(end.x), y: power > .02 ? end.y - side * (halfH + 12 / unit) : center.y + ey + halfH + 8 / unit },
+      { x: clampX(end.x), y: center.y + side * (ey + halfH + 8 / unit) },
+      { x: center.x + ex + halfW + 8 / unit, y: center.y },
+      { x: center.x - ex - halfW - 8 / unit, y: center.y },
+    ];
+    const fits = point => point.x >= view.minX + halfW + padding && point.x <= view.maxX - halfW - padding
+      && point.y >= view.minY + halfH + padding && point.y <= view.maxY - halfH - padding
+      && (Math.abs(point.x - center.x) >= halfW + ex + 4 / unit || Math.abs(point.y - center.y) >= halfH + ey + 4 / unit);
+    const panel = candidates.find(fits) || { x: clampX(end.x), y: clampY(candidates[0].y) };
+    rounded(ctx, panel.x - halfW, panel.y - halfH, panelW, panelH, 7 / unit, '#fff8e9f2', '#71947a', 1 / unit);
+    text(ctx, power > .02 ? `PULL · ${Math.round(power * 100)}%` : 'PULL BACK', panel.x, panel.y - 12 / unit, 12 / unit, '#34634d', 900);
+    rounded(ctx, panel.x - 44 / unit, panel.y - 3 / unit, 88 / unit, 6 / unit, 2 / unit, '#cfdbbd');
+    rounded(ctx, panel.x - 42 / unit, panel.y - 2 / unit, Math.max(1 / unit, 84 * power / unit), 4 / unit, 1 / unit, '#6fa586');
+    text(ctx, cue.caption, panel.x, panel.y + 13 / unit, 11 / unit, '#805a37', 900);
     if (power > .02) {
       // The short solid arrow only indicates direction. It deliberately makes
       // no promise about a future bounce, stopping point or wall breakthrough.
@@ -655,15 +724,7 @@ export class GameRenderer {
       stroke(ctx, points, '#b9ffda', 7);
       ctx.restore();
     }
-    const view = this.view || { minX: 0, minY: 0, maxX: WIDTH, maxY: HEIGHT };
-    const meterX = Math.max(view.minX + 55, Math.min(view.maxX - 55, end.x));
-    const offset = power > .02 ? (end.y >= center.y ? -30 : 30) : (body.game?.h || 50) / 2 + 22;
-    const meterY = Math.max(view.minY + 26, Math.min(view.maxY - 38, end.y + offset));
-    rounded(ctx, meterX - 37, meterY - 8, 74, 16, 6, '#34634d', '#e6ffe8', 1.5);
-    rounded(ctx, meterX - 33, meterY - 4, Math.max(2, 66 * power), 8, 3,
-      gradient(ctx, meterX - 33, meterY - 4, 0, 8, power > .8 ? ['#ecffc1', '#8fd594'] : ['#c0f5cd', '#76b88b']));
-    text(ctx, power > .02 ? `RELEASE · ${Math.round(power * 100)}%` : 'PULL BACK',
-      meterX, meterY + 21, 13, '#34634d', 900);
+    this.drawGripCue(ctx, body, cue);
   }
 
   drawFurniture(ctx, body, selected, now) {

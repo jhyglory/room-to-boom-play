@@ -25,12 +25,12 @@
   <title>Room to Boom! — Moving day</title>
   <link rel="preload" href="./fonts/fredoka-bold-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="./fonts/nunito-latin-variable.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./style.css?v=0.20.0-english1">
+  <link rel="stylesheet" href="./style.css?v=0.21.0-english1">
   <link rel="preload" href="./assets/leaderboard/result-title-en.png" as="image">
-  <link rel="stylesheet" href="./result.css?v=0.20.0-english1">
+  <link rel="stylesheet" href="./result.css?v=0.21.0-english1">
 </head>
 <body>
-  <main class="playground" data-build="0.20.0">
+  <main class="playground" data-build="0.21.0">
     <header class="site-header">
       <a class="brand" href="./" aria-label="Room to Boom home"><img src="./assets/brand/room-to-boom-golden-toy.png" width="2172" height="724" alt="Room to Boom!" decoding="async" fetchpriority="high" draggable="false"></a>
       <div class="stage-line"><span class="stage-kicker">STUDIO SLINGSHOT</span><span class="difficulty-label" title="16 close-packed pieces · light pieces coast farther · heavy pieces resist">TIGHT · 16</span><span class="stage-badge">STAGE 01</span></div>
@@ -47,7 +47,7 @@
           <div class="start-card">
             <span class="card-eyebrow">IT’S MOVING DAY</span>
             <h1>A little pull. <span>A big move.</span></h1>
-            <p>Grab → pull back → release to launch the other way.<br>Bring all <strong>16 pieces</strong> home. Let each settle inside.</p>
+            <p>Pull back → release the other way.<br>Center for distance · edge for spin.<br>Tap moving furniture to stop it.<br>Bring all <strong>16 pieces</strong> inside. Let each settle.</p>
             <div class="start-actions"><button id="play" class="primary-button">LET’S MOVE <span aria-hidden="true">↗</span></button><button id="view-rankings" class="secondary-button" type="button">RANKINGS</button></div>
             <span class="card-footnote">FIRST GRAB STARTS THE CLOCK</span>
           </div>
@@ -56,6 +56,7 @@
           <div class="modal-card pause-menu"><span class="card-eyebrow">TAKE A BREATHER</span><h2 id="pause-title">Moving can wait.</h2><p>Your furniture and timer are paused.</p><button id="resume" type="button" class="primary-button">KEEP MOVING <span aria-hidden="true">→</span></button><div class="pause-controls-slot" id="pause-controls-slot"></div></div>
         </div>
         <div class="board-hint" id="board-hint">PULL DOWN · LAUNCH UP</div>
+        <div id="control-coach" class="control-coach" role="status" aria-live="polite" aria-atomic="true" hidden><strong id="control-coach-title"></strong><span id="control-coach-copy"></span></div>
       </div>
       <div id="desktop-controls-slot"><div class="board-toolbar" id="board-toolbar">
         <div class="toolbar-actions">
@@ -65,6 +66,7 @@
             <div class="settings-panel" id="game-settings-panel">
               <div class="record-stack"><div class="best-strip"><span>PERSONAL BEST</span><strong id="best-time">—</strong></div><div id="challenge-badge" class="challenge-badge" hidden>FRIEND’S TIME <strong id="challenge-time"></strong></div></div>
               <div class="instruction-card"><span class="instruction-icon" aria-hidden="true"><svg viewBox="0 0 34 34"><path d="M17 27V7M11 13l6-6 6 6"/></svg></span><div class="instruction-copy"><strong>PULL BACK. LET IT FLY.</strong><span id="live-hint" class="live-hint">Launch opposite to your pull. Time is the only score.</span></div></div>
+              <p class="control-help">Center for distance · edge for spin.<br>Tap moving furniture to stop it.</p>
               <div class="settings-actions">
                 <button id="sound" class="sound-button" aria-pressed="true" aria-label="Mute sound"><svg viewBox="0 0 26 26" aria-hidden="true"><path class="sound-speaker" d="M3 9h4l6-5v18l-6-5H3Z"/><path class="sound-waves" d="M18 7q7 6 0 12"/></svg><span id="sound-label">SOUND</span></button>
                 <button id="motion" class="motion-button" aria-pressed="false" title="Reduce visual effects">LESS MOTION</button>
@@ -120,6 +122,6 @@
   <dialog id="restart-dialog"><form method="dialog"><span class="card-eyebrow">A FRESH START?</span><h2>Another moving day.</h2><p>This run will reset to the original layout.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">Keep this run</button><button value="restart" class="primary-button">Start over ↻</button></div></form></dialog>
   <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
   <script src="./vendor/matter.min.js"></script>
-  <script type="module" src="./app.js?v=0.20.0"></script>
+  <script type="module" src="./app.js?v=0.21.0"></script>
 </body>
 </html>
