@@ -1,4 +1,15 @@
-import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.29.0';
+import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.30.0';
+
+export const RANKING_RULESETS = Object.freeze([
+  {stage:STAGE,label:'v0.30',current:true},
+  {stage:'studio-triple-top-swap16-v29',label:'v0.29'},
+  {stage:'studio-triple-swap16-v28',label:'v0.28'},
+  {stage:'studio-triple-half16-v27',label:'v0.27'},
+].map(value=>Object.freeze(value)));
+function rankingStage(value){
+  if(!RANKING_RULESETS.some(rules=>rules.stage===value))throw new RangeError('Unsupported ranking rules');
+  return value;
+}
 
 const PLAYER_KEY = 'room-to-boom:player-id';
 const NAME_KEY = 'room-to-boom:nickname';
@@ -25,8 +36,8 @@ export function makeSubmissionId() {
 export function rankLabel(entry) {
   return entry ? `${entry.tied ? 'Tied ' : ''}#${entry.rank}` : 'No rank yet';
 }
-export function validateBoard(value) {
-  if (!value || value.stage !== STAGE || value.scope !== 'server' || !Number.isSafeInteger(value.total) || value.total < 0 || !Array.isArray(value.top) || value.top.length !== Math.min(8,value.total)) throw new Error('Invalid leaderboard');
+export function validateBoard(value, expectedStage = STAGE) {
+  if (!value || value.stage !== expectedStage || value.scope !== 'server' || !Number.isSafeInteger(value.total) || value.total < 0 || !Array.isArray(value.top) || value.top.length !== Math.min(8,value.total)) throw new Error('Invalid leaderboard');
   const row = (entry, position) => {
     if (!entry || typeof entry.playerId !== 'string' || !entry.playerId || typeof entry.nickname !== 'string' || normalizeSeconds(entry.seconds) === null || !Number.isSafeInteger(entry.rank) || entry.rank < 1 || entry.rank > value.total) throw new Error('Invalid rank');
     const ordinal=entry.position ?? position;
@@ -148,16 +159,18 @@ export class LeaderboardClient {
     }
     return this.profilePromise;
   }
-  localBoard(seconds) {
-    const known=readBest(this.storage),given=normalizeSeconds(seconds);
-    const candidates=[known,given,...(!this.serverEnabled?[this.deviceBest]:[])].filter(value=>value!==null);
+  localBoard(seconds,{stage=STAGE}={}) {
+    rankingStage(stage);
+    const current=stage===STAGE,known=readBest(this.storage,stage),given=current?normalizeSeconds(seconds):null;
+    const candidates=[known,given,...(!this.serverEnabled&&current?[this.deviceBest]:[])].filter(value=>value!==null);
     const best=candidates.length?Math.min(...candidates):null;
     const me=best===null?null:{rank:1,position:1,tied:false,playerId:this.playerId,nickname:this.nickname,seconds:best,isMe:true};
-    return {scope:'browser',stage:STAGE,total:me?1:0,top:me?[me]:[],me,persisted:known!==null&&(this.serverEnabled||known===best)};
+    return {scope:'browser',stage,total:me?1:0,top:me?[me]:[],me,persisted:known!==null&&(this.serverEnabled||known===best)};
   }
-  async request(path,options={}) {
+  async request(path,options={}, {anonymous=false}={}) {
     if(!this.serverEnabled)throw new Error('Server requests are disabled');
     if(typeof this.fetcher!=='function')throw new Error('Server unavailable');
+    if(anonymous&&(!path.startsWith('./api/leaderboard?')||options.method&&options.method!=='GET'))throw new TypeError('Public access is read-only');
     let target=path,requestOptions={...options,credentials:'same-origin'};
     if(this.apiBase){
       if(typeof path!=='string'||!path.startsWith('./api/'))throw new TypeError('Invalid leaderboard API path');
@@ -166,7 +179,7 @@ export class LeaderboardClient {
       target=url.href;
       const headers=new Headers(options.headers);
       headers.delete('Authorization');
-      if(this.token)headers.set('Authorization',`Bearer ${this.token}`);
+      if(this.token&&!anonymous)headers.set('Authorization',`Bearer ${this.token}`);
       requestOptions={...options,headers:Object.fromEntries(headers),credentials:'omit',cache:'no-store'};
     }
     const controller=new AbortController();let timer;
@@ -180,6 +193,13 @@ export class LeaderboardClient {
         clearTimeout(timer);timer=setTimeout(()=>{controller.abort();reject(new Error('Response timed out'));},this.timeoutMs);
       })]);
     } finally {clearTimeout(timer);}
+  }
+  async publicBoard(stage,extra={}) {
+    // A failed personal proof must not hide everybody else's public records.
+    // Keep that proof unchanged: only an explicit authenticated operation can
+    // identify this browser, and this read must never mint another player.
+    const board=validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`,{}, {anonymous:true}),stage);
+    return {...board,identityWarning:true,...extra};
   }
   submit(seconds,{submissionId=makeSubmissionId(),nickname}={}) {
     const value=normalizeSeconds(seconds);
@@ -204,7 +224,11 @@ export class LeaderboardClient {
         const name=cleanNickname(nickname??this.nickname);
         const data=await this.request('./api/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stage:STAGE,seconds:value,nickname:name,submissionId})});
         return this.adoptBoard(validateBoard(data));
-      } catch { return {...this.localBoard(value),syncError:true}; }
+      } catch {
+        this.profile=null;
+        if(this.apiBase){try{return await this.publicBoard(STAGE,{syncError:true,submissionPending:true});}catch{}}
+        return {...this.localBoard(value),syncError:true,submissionPending:true};
+      }
     });
     this.submissions.set(submissionId,{seconds:value,promise});
     // A failed connection may have committed on the server. Retry with the
@@ -213,22 +237,28 @@ export class LeaderboardClient {
     if(this.submissions.size>64)this.submissions.delete(this.submissions.keys().next().value);
     return promise;
   }
-  updateNickname(value,{seconds=null,localOnly=false}={}) {
+  updateNickname(value,{seconds=null,localOnly=false,stage=STAGE}={}) {
+    rankingStage(stage);
     const name=cleanNickname(value);
     return this.enqueue(async()=>{
-      if(localOnly||!this.serverEnabled){this.setNickname(name);return {...this.localBoard(seconds),profileSaved:'browser'};}
+      if(localOnly||!this.serverEnabled){this.setNickname(name);return {...this.localBoard(seconds,{stage}),profileSaved:'browser'};}
       await this.ensureProfile();
       const profile=await this.request('./api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:name})});
       const saved=this.adoptProfile(profile);this.setNickname(saved.nickname);
-      const board=this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(STAGE)}`)));
+      const board=this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage));
       return {...board,profileSaved:'server'};
     });
   }
-  refresh(seconds) {
+  refresh(seconds,{stage=STAGE}={}) {
+    rankingStage(stage);
     return this.enqueue(async()=>{
-      if(!this.serverEnabled)return this.localBoard(seconds);
-      try {await this.ensureProfile();return this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(STAGE)}`)));}
-      catch {return {...this.localBoard(seconds),syncError:true};}
+      if(!this.serverEnabled)return this.localBoard(seconds,{stage});
+      try {await this.ensureProfile();return this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage));}
+      catch {
+        this.profile=null;
+        if(this.apiBase){try{return await this.publicBoard(stage);}catch{}}
+        return {...this.localBoard(seconds,{stage}),syncError:true};
+      }
     });
   }
 }

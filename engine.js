@@ -53,29 +53,39 @@ export const TOTAL_FURNITURE = FURNITURE.length;
 
 // v25 separates launch weight from inertia and material glide. Values for the
 // original ten analogues were checked against Pull & Move on2026-11-03.
-// Added furniture keeps its existing material analogues. No extra floor brake:
-// a heavy low-drag appliance can carry momentum farther than a rough light box.
+// Added furniture keeps its existing material analogues. v30 raises each
+// material's single sliding drag and passive rebound by the requested20%.
+// A low-drag appliance still carries momentum farther than a rough light box.
+export const MOTION_TUNING = Object.freeze({ slidingDragScale:1.2, reboundScale:1.2,
+  lampDamageScale:2, previousWallRestitution:.7 });
+const WALL_RESTITUTION=MOTION_TUNING.previousWallRestitution*MOTION_TUNING.reboundScale;
+// A stronger passive bounce returns more energy and leaves less for cracks.
+// Compensate only the requested lamp so matched surviving normal impacts do
+// twice v29's actual HP damage, while spending only their real kinetic loss.
+const LAMP_DAMAGE_EFFICIENCY=MOTION_TUNING.lampDamageScale
+  *(1-MOTION_TUNING.previousWallRestitution**2)/(1-WALL_RESTITUTION**2);
 export const FLOOR_DAMPING = Object.freeze({ fabric:0,cardboard:0,wood:0,metal:0,ceramic:0 });
 export const GLIDE_PROFILES = Object.freeze(Object.fromEntries(
-  FURNITURE.map(spec=>[spec.id,Object.freeze({floorDamping:0,frictionAir:spec.frictionAir})]),
+  FURNITURE.map(spec=>[spec.id,Object.freeze({floorDamping:0,frictionAir:spec.frictionAir*MOTION_TUNING.slidingDragScale})]),
 ));
 export const BOUNCE_PROFILES = Object.freeze(Object.fromEntries(
-  FURNITURE.map(spec=>[spec.id,spec.restitution]),
+  FURNITURE.map(spec=>[spec.id,spec.restitution*MOTION_TUNING.reboundScale]),
 ));
 export const WALL_BOUNCE_PROFILES = Object.freeze(Object.fromEntries(
-  FURNITURE.map(spec=>[spec.id,.7]),
+  FURNITURE.map(spec=>[spec.id,WALL_RESTITUTION]),
 ));
 export function contactRestitution(a,b) {
   if(a.game?.kind && b.isStatic) return WALL_BOUNCE_PROFILES[a.game.kind];
   if(b.game?.kind && a.isStatic) return WALL_BOUNCE_PROFILES[b.game.kind];
   // The reference uses Matter's maximum material mixing. The contact solver
   // below remains passive and respects the actual normal, masses and inertia.
-  return Math.max(0,Math.min(.7,Math.max(a.restitution||0,b.restitution||0)));
+  return Math.max(0,Math.min(1,Math.max(a.restitution||0,b.restitution||0)));
 }
-// Plaster no longer becomes secretly weaker because a prop has high bounce.
-// Actual normal kinetic energy determines the physical work available.
+// Normal kinetic energy determines the actual work available. The lamp's
+// explicit damage efficiency is independent from its rebound coefficient.
 export const WALL_BREAK_PROFILES = Object.freeze(Object.fromEntries(
-  FURNITURE.map(spec=>[spec.id,Object.freeze({resistanceScale:1})]),
+  FURNITURE.map(spec=>[spec.id,Object.freeze({resistanceScale:1,
+    damageEfficiency:spec.id==='lamp'?LAMP_DAMAGE_EFFICIENCY:1})]),
 ));
 const REFERENCE_SCALE = WORLD.width / 540;
 export const REFERENCE_LAUNCH = Object.freeze({
@@ -107,9 +117,9 @@ export const PHYSICS = Object.freeze({
   wallEnergyPerHealth: 84,
   wallElasticEnergy: 72,
   wallEnergyTransfer: .65,
-  // v29 needs1.5 times the former wall work; furniture motion stays unchanged.
+  // Preserve v29 global plaster resistance; only the lamp gains efficiency.
   wallDamageScale: 1/3,
-  wallRestitution: .7,
+  wallRestitution: WALL_RESTITUTION,
   wallIntactEnergyPerHealth: 240,
   wallIntactMinEnergy: 900,
   wallFriction: .02,
@@ -577,8 +587,8 @@ export class MovingWorld {
     const reserve=.5*effectiveMass*PHYSICS.wallMinExitSpeed**2;
     const before=wall.game.health;
     const wasCracked=wall.game.cracked;
-    const resistanceScale=WALL_BREAK_PROFILES[body.game.kind].resistanceScale;
-    const damageScale=PHYSICS.wallDamageScale;
+    const {resistanceScale,damageEfficiency}=WALL_BREAK_PROFILES[body.game.kind];
+    const damageScale=PHYSICS.wallDamageScale*damageEfficiency;
     const workPerHealth=PHYSICS.wallEnergyPerHealth*resistanceScale/(PHYSICS.wallEnergyTransfer*damageScale);
     // The onset threshold has a per-kind characteristic-speed response, while
     // the absolute normal-speed and angle guards reject slow taps and skims.
@@ -610,7 +620,7 @@ export class MovingWorld {
     wall.game.impact=intensity;
     const info={point,normal,velocity:{...velocity},angularVelocity,contactArm:arm,
       intensity,speed,energy,coupledEnergy,effectiveMass,damage,damageWork,remainingHealth:wall.game.health,
-      resistanceScale,damageScale,workPerHealth,minimumImpactEnergy,intactEnergy,normalFraction,meaningful,
+      resistanceScale,damageScale,damageEfficiency,workPerHealth,minimumImpactEnergy,intactEnergy,normalFraction,meaningful,
       firstCrack:!wasCracked&&damage>0,
       bodyId:body.game.id,material:body.game.material,heavy:body.game.heavy,kind:body.game.kind,
       broken:wall.game.health<=.000001,fractureWork:0,exitSpeed:0,restitution:pair.restitution};

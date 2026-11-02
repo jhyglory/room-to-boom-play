@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.29.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.30.0';
 
-// v29 swaps the top furniture rows and increases wall resistance1.5×; prior records and identities stay intact.
-export const STAGE = 'studio-triple-top-swap16-v29';
+// v30 increases sliding drag and rebound1.2× and doubles lamp fracture efficiency; preserve earlier rules and identities.
+export const STAGE = 'studio-billiards16-v30';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;
@@ -15,10 +15,10 @@ export function normalizeSeconds(seconds) {
   return rounded > 0 ? rounded : null;
 }
 
-export function readBest(storage) {
+export function readBest(storage, stage = STAGE) {
   try {
-    const record = JSON.parse(storage.getItem(BEST_KEY));
-    if (!record || record.stage !== STAGE) return null;
+    const record = JSON.parse(storage.getItem(`room-to-boom:best:${stage}`));
+    if (!record || record.stage !== stage) return null;
     return normalizeSeconds(record.seconds);
   } catch {
     return null;
