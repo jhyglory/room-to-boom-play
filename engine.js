@@ -1,15 +1,15 @@
 /* Room to Boom! — deterministic, zero-gravity moving physics. */
 export const WORLD = Object.freeze({
   width: 520,
-  height: 920,
-  delivery: Object.freeze({ minX: 56, maxX: 464, minY: 43, maxY: 411 }),
-  oldInterior: Object.freeze({ minX:56,maxX:464,minY:509,maxY:851 }),
+  height: 816,
+  delivery: Object.freeze({ minX: 56, maxX: 464, minY: 43, maxY: 359 }),
+  oldInterior: Object.freeze({ minX:56,maxX:464,minY:431,maxY:747 }),
   rooms: Object.freeze({
-    old: Object.freeze({ minX:47,maxX:473,minY:500,maxY:860 }),
-    new: Object.freeze({ minX:47,maxX:473,minY:34,maxY:420 }),
+    old: Object.freeze({ minX:47,maxX:473,minY:422,maxY:756 }),
+    new: Object.freeze({ minX:47,maxX:473,minY:34,maxY:368 }),
   }),
   doorway: Object.freeze({ minX:190,maxX:330,centerX:260 }),
-  corridor: Object.freeze({ minY:429,maxY:491 }),
+  corridor: Object.freeze({ minY:377,maxY:413 }),
 });
 
 export const REFERENCE_FURNITURE = Object.freeze([
@@ -34,10 +34,10 @@ export const REFERENCE_FURNITURE = Object.freeze([
 ]);
 const FURNITURE_SCALE=.85;
 const PORTRAIT_LAYOUT=Object.freeze({
-  bed:[169,550],boxA:[260,550],fridge:[323,550],washing_machine:[391,550],
-  wardrobe:[142,650],desk:[240,650],bookcase:[333,650],plant:[399,650],
-  sofa:[126,737],armchair:[225,737],dresser:[310,737],table:[405.5,737],
-  chair:[165.5,817],tv_stand:[237.85,817],boxB:[307.65,817],lamp:[360.45,817],
+  bed:[169,477],boxA:[260,477],fridge:[323,477],washing_machine:[391,477],
+  wardrobe:[142,565],desk:[243,565],bookcase:[333,565],plant:[399,565],
+  sofa:[126,644],armchair:[225,644],dresser:[310,644],table:[405.5,644],
+  chair:[165.5,716],tv_stand:[237.85,716],boxB:[307.65,716],lamp:[360.45,716],
 });
 export const FURNITURE=Object.freeze(REFERENCE_FURNITURE.map(spec=>Object.freeze({
   ...spec,x:PORTRAIT_LAYOUT[spec.id][0],y:PORTRAIT_LAYOUT[spec.id][1],
@@ -239,24 +239,24 @@ export class MovingWorld {
       }
     };
     // The only indestructible walls are invisible perimeter guard rails.
-    wall('world-left',8,460,16,920,false,true);
-    wall('world-right',512,460,16,920,false,true);
+    wall('world-left',8,408,16,816,false,true);
+    wall('world-right',512,408,16,816,false,true);
     wall('world-top',260,8,520,16,false,true);
-    wall('world-bottom',260,912,520,16,false,true);
-    wall('old-top',260,860,444,18);
-    wall('old-left',47,680,18,378);
-    wall('old-right',473,680,18,378);
-    wall('old-bottom-left',64,500,52,18);
-    wall('old-weak',140,500,100,18,true);
-    wall('old-bottom-right',406,500,152,18);
+    wall('world-bottom',260,808,520,16,false,true);
+    wall('old-top',260,756,444,18);
+    wall('old-left',47,589,18,352);
+    wall('old-right',473,589,18,352);
+    wall('old-bottom-left',64,422,52,18);
+    wall('old-weak',140,422,100,18,true);
+    wall('old-bottom-right',406,422,152,18);
     // Both weak runs meet the same side of the open doorway. Each contacted
     // panel must still fracture separately, but the route continues upstairs
     // instead of ending at the neighboring normal-strength wall row.
-    wall('new-top-left',64,420,52,18);
-    wall('new-weak',140,420,100,18,true);
-    wall('new-top-right',406,420,152,18);
-    wall('new-left',47,227,18,404);
-    wall('new-right',473,227,18,404);
+    wall('new-top-left',64,368,52,18);
+    wall('new-weak',140,368,100,18,true);
+    wall('new-top-right',406,368,152,18);
+    wall('new-left',47,201,18,352);
+    wall('new-right',473,201,18,352);
     wall('new-bottom',260,34,444,18);
     Composite.add(this.engine.world, [...this.walls, ...this.bodies]);
     Events.on(this.engine, 'collisionStart', (event) => this._collisions(event));

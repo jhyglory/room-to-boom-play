@@ -82,8 +82,8 @@ button svg { pointer-events: none; }
 .challenge-badge strong { margin-left: 5px; }
 .canvas-wrap {
   position: relative;
-  width: min(100%, calc((100svh - 377px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 920));
-  aspect-ratio: 520 / 920;
+  width: min(100%, calc((100svh - 377px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 816));
+  aspect-ratio: 520 / 816;
   margin: 9px auto 0;
   isolation: isolate;
   border-radius: 12.52px;
@@ -183,7 +183,7 @@ dialog p { font-size: 12px; line-height: 17px; color: var(--rtb-text-muted); }
   .pause-button { margin-top: 1px; }
   .record-stack { margin-top: 8px; }
   .challenge-badge { top: -10px; font-size: 8px; line-height: 9px; }
-  .canvas-wrap { margin-top: 8px; width: min(100%, calc((100svh - 300px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 920)); }
+  .canvas-wrap { margin-top: 8px; width: min(100%, calc((100svh - 300px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 816)); }
   .board-toolbar { margin-top: 8px; }
   .instruction-card { height: 57px; padding-top: 3px; padding-bottom: 3px; }
   .toolbar-actions { margin-top: 8px; }
@@ -216,12 +216,12 @@ body.reduce-motion * { transition: none !important; }
     --desktop-rail: clamp(220px, 20vw, 280px);
     --desktop-gap: clamp(16px, 2vw, 28px);
     --desktop-board: min(
-      calc((100svh - 32px) * 520 / 920),
+      calc((100svh - 32px) * 520 / 816),
       calc(100vw - 32px - var(--desktop-rail) - var(--desktop-gap))
     );
     position: relative;
     width: calc(32px + var(--desktop-rail) + var(--desktop-gap) + var(--desktop-board));
-    height: calc(var(--desktop-board) * 920 / 520);
+    height: calc(var(--desktop-board) * 816 / 520);
     min-width: 0;
     max-width: none;
     margin: 16px 0;
@@ -263,7 +263,7 @@ body.reduce-motion * { transition: none !important; }
     height: 100%;
     min-height: 0;
     margin: 0;
-    aspect-ratio: 520 / 920;
+    aspect-ratio: 520 / 816;
     border-radius: 18px;
   }
   .game-hud {
@@ -425,7 +425,7 @@ body.reduce-motion * { transition: none !important; }
 .settings-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .settings-actions button { min-height: 44px; height: 44px; }
 
-/* The shared portrait world is520×920. Its canvas uses this actual ratio;
+/* The shared portrait world is520×816. Its canvas uses this actual ratio;
    neither art nor collision coordinates are stretched to fill the viewport. */
 @media (max-width: 739px) {
   .playground {
@@ -439,8 +439,8 @@ body.reduce-motion * { transition: none !important; }
   .game-hud { flex: none; height: 56px; padding: 0 3px; }
   .stat-card { height: 56px; padding-top: 2px; padding-bottom: 2px; }
   .canvas-wrap {
-    flex: none; width: min(100%, calc((100svh - 210px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 920));
-    height: auto; aspect-ratio: 520 / 920; margin: auto;
+    flex: none; width: min(100%, calc((100svh - 210px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 520 / 816));
+    height: auto; aspect-ratio: 520 / 816; margin: auto;
   }
   .board-toolbar { position: relative; z-index: 7; flex: none; margin: 0 3px; }
   .toolbar-actions { grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
@@ -482,8 +482,8 @@ body.reduce-motion * { transition: none !important; }
   }
   body:is([data-phase="playing"], [data-phase="paused"]) .canvas-wrap {
     flex: none;
-    width: min(100%, calc((100dvh - var(--mobile-hud-height) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * var(--world-view-ratio, .5652173913)));
-    height: auto; max-width: 100%; aspect-ratio: var(--world-view-ratio, .5652173913);
+    width: min(100%, calc((100dvh - var(--mobile-hud-height) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * var(--world-view-ratio, .6372549020)));
+    height: auto; max-width: 100%; aspect-ratio: var(--world-view-ratio, .6372549020);
     margin: auto; border-radius: 8px;
   }
   body:is([data-phase="playing"], [data-phase="paused"]) #desktop-controls-slot { display: none; }

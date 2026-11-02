@@ -1,10 +1,11 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.21.0';
-import { GameRenderer } from './render.js?v=0.21.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.22.0';
+import { GameRenderer } from './render.js?v=0.22.0';
+import { WALL_RENDER } from './assets.js?v=0.22.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.21.0';
+import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.22.0';
 import { GameAudio } from './audio.js?v=0.18.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.21.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.22.0';
 import { LEADERBOARD_MODE } from './runtime-config.js?v=0.19.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -74,7 +75,7 @@ let leaderboardSyncing = false;
 const diagnosticImpacts=[];
 const itemNames = Object.fromEntries(FURNITURE.map(item=>[item.id,item.name]));
 const STEP = PHYSICS.stepMs;
-const COACH_KEY = 'room-to-boom:coach:shortcuts16-v21';
+const COACH_KEY = 'room-to-boom:coach:wide16-v22';
 const seenCoach = new Set((readSetting(COACH_KEY)||'').split(',').filter(Boolean));
 let coachUntil = 0;
 // Keep reference-world speed units, then add the real material and mass
@@ -562,7 +563,7 @@ const completionQA=(()=>{try{const url=new URL(window.location.href);return ['12
 if(completionQA)canvas.addEventListener('room-to-boom:inspect',event=>{
   if(!event.detail||typeof event.detail!=='object')return;
   const activeBodies=new Set(world.M.Composite.allBodies(world.engine.world));
-  event.detail.snapshot={phase,moved:world.moved,resultSeconds,world:JSON.parse(JSON.stringify(WORLD)),camera:{...renderer.view},transform:renderer.screenTransform(),cssScale:renderer.cssScale,
+  event.detail.snapshot={phase,moved:world.moved,resultSeconds,world:JSON.parse(JSON.stringify(WORLD)),wallRender:{opaqueHeight:WALL_RENDER.opaqueHeight},camera:{...renderer.view},transform:renderer.screenTransform(),cssScale:renderer.cssScale,
     grabbed:world.grabbed?.game.id??null,aim:world.aim?JSON.parse(JSON.stringify(world.aim)):null,
     impacts:diagnosticImpacts.map(event=>({...event,point:event.point?{...event.point}:null})),maxPull:PHYSICS.maxPull,
     bodies:world.bodies.map(body=>({id:body.game.id,position:{...body.position},velocity:{...world.M.Body.getVelocity(body)},mass:body.mass,restitution:body.restitution,angle:body.angle,angularVelocity:world.M.Body.getAngularVelocity(body),vertices:body.vertices.map(({x,y})=>({x,y})),w:body.game.w,h:body.game.h,

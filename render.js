@@ -1,6 +1,6 @@
-import { WORLD } from './engine.js?v=0.21.0';
-import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.21.0';
-import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.18.0';
+import { WORLD } from './engine.js?v=0.22.0';
+import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.22.0';
+import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.22.0';
 
 const WIDTH = WORLD.width;
 const HEIGHT = WORLD.height;
@@ -347,7 +347,7 @@ export class GameRenderer {
   drawGround(ctx) {
     ctx.fillStyle = '#faf4e7'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
     const left = ROOMS.old.minX, right = ROOMS.old.maxX, width = right - left;
-    rounded(ctx, left - 18, 20, width + 36, HEIGHT - 45, 18, '#e9e8db', '#d5d5c3', 1);
+    rounded(ctx, left - 14, 20, width + 28, HEIGHT - 45, 14, '#e9e8db', '#d5d5c3', 1);
     // A quiet, light corridor makes a missing wall segment legible immediately
     // after the brief dust clears, without a decorative rail in the passage.
     rounded(ctx, left - 9, ROOMS.new.maxY + 9, width + 18,
@@ -409,9 +409,13 @@ export class GameRenderer {
     ctx.save();
     ctx.setLineDash([6, 7]);
     const x = WORLD.doorway.centerX;
-    stroke(ctx, [[x, 480], [x, 442]], '#84a18a', 2.5);
+    // A short orientation mark lives entirely in the real free corridor. It is
+    // not a trajectory, nor does its placement assume a former wall layout.
+    const tipY = WORLD.corridor.minY + 7, tailY = WORLD.corridor.maxY - 7;
+    const wingY = tipY + Math.min(8, (tailY - tipY) / 2);
+    stroke(ctx, [[x, tailY], [x, tipY]], '#84a18a', 2.5);
     ctx.setLineDash([]);
-    stroke(ctx, [[x - 8, 452], [x, 442], [x + 8, 452]], '#84a18a', 2.5);
+    stroke(ctx, [[x - 7, wingY], [x, tipY], [x + 7, wingY]], '#84a18a', 2.5);
     ctx.restore();
   }
 
@@ -558,25 +562,25 @@ export class GameRenderer {
           rounded(ctx, wall.position.x - segment/2, y - 9, segment, 18, 0, null, '#d0634b', 1.2);
         if (mode === 'broken') rounded(ctx, CENTER_X - segment, y - 28, segment * 2, 56, 0, null, '#6298b6', 1.2);
       }
-      text(ctx, mode.toUpperCase() + (mode === 'broken' ? ' · TWO INDEPENDENT END STUBS' : ' · CONNECTED STRIP / COMMON HEIGHT 34'),
+      text(ctx, mode.toUpperCase() + (mode === 'broken' ? ' · TWO INDEPENDENT END STUBS' : ` · CONNECTED STRIP / COMMON HEIGHT ${WALL_RENDER.opaqueHeight}`),
         CENTER_X, y - 42, 9, '#49362e', 800);
     }
     for (const [x, angle] of [[ROOMS.old.minX + 30, -Math.PI / 2], [ROOMS.old.maxX - 30, Math.PI / 2]]) {
-      const wall = { position: { x, y: 650 }, game: { id: `vertical-${x}`, w: 18, h: 152, health: 2, maxHealth: 2 } };
+      const wall = { position: { x, y: 600 }, game: { id: `vertical-${x}`, w: 18, h: 152, health: 2, maxHealth: 2 } };
       this.drawWall(ctx, wall, { walls: [wall] });
-      if (showColliders) rounded(ctx, x - 9, 574, 18, 152, 0, null, '#d0634b', 1.2);
+      if (showColliders) rounded(ctx, x - 9, 524, 18, 152, 0, null, '#d0634b', 1.2);
     }
-    for (const [id, x, y] of [['sofa', CENTER_X + 20, 700], ['fridge', CENTER_X - 95, 630]]) {
+    for (const [id, x, y] of [['sofa', CENTER_X + 20, 640], ['fridge', CENTER_X - 95, 580]]) {
       const spec = ASSET_SPECS[id];
       ctx.save(); ctx.translate(x, y); this.drawRegisteredSprite(ctx, id);
       if (showColliders) rounded(ctx, -spec.body.width / 2, -spec.body.height / 2, spec.body.width, spec.body.height, 0, null, '#d0634b', 1.2);
       ctx.restore();
     }
     const debris = this.getAsset('wall_debris');
-    if (debris) ctx.drawImage(debris, CENTER_X + 85, 705, 82, 82);
-    text(ctx, 'Original PNGs · full furniture frames · uniform floor cover × 1.5', CENTER_X, 815, 9, '#84735f', 700);
-    text(ctx, 'v18 shared portrait geometry · removed colliders open their full gap', CENTER_X, 840, 8, '#84735f', 700);
-    text(ctx, 'Vertical walls rotate their source lighting; no decorative frame overlay.', CENTER_X, 865, 8, '#84735f', 700);
+    if (debris) ctx.drawImage(debris, CENTER_X + 85, 650, 82, 82);
+    text(ctx, 'Original PNGs · full furniture frames · uniform floor cover × 1.5', CENTER_X, HEIGHT - 71, 9, '#84735f', 700);
+    text(ctx, 'v22 shared wide rooms · removed colliders open their full gap', CENTER_X, HEIGHT - 46, 8, '#84735f', 700);
+    text(ctx, 'Vertical walls rotate their source lighting; no decorative frame overlay.', CENTER_X, HEIGHT - 21, 8, '#84735f', 700);
     ctx.restore();
   }
 
@@ -592,7 +596,7 @@ export class GameRenderer {
     for (const [index, id] of FURNITURE_ASSET_IDS.entries()) {
       const spec = ASSET_SPECS[id];
       const bounds = furnitureVisualBounds(id);
-      const x = WIDTH / 4 * (index % 4 + .5), y = 150 + Math.floor(index / 4) * 200;
+      const x = WIDTH / 4 * (index % 4 + .5), y = 132 + Math.floor(index / 4) * ((HEIGHT - 136) / 4);
       const { width: w, height: h } = spec.body;
       ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
       this.drawRegisteredSprite(ctx, id);

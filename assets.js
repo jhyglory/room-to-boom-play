@@ -644,7 +644,7 @@ const ENVIRONMENT_SPECS = {
       "x": 1087.0,
       "y": 364.5
     },
-    "scale": 0.12546125461254612,
+    "scale": 0.0959409594095941,
     "rotation": 0,
     "type": "raster_wall_surface",
     "opaqueBounds": [
@@ -693,7 +693,7 @@ const ENVIRONMENT_SPECS = {
       "x": 1086.0,
       "y": 364.0
     },
-    "scale": 0.12781954887218044,
+    "scale": 0.09774436090225563,
     "rotation": 0,
     "type": "raster_wall_surface",
     "opaqueBounds": [
@@ -713,14 +713,14 @@ const ENVIRONMENT_SPECS = {
 export const ASSET_SPECS = Object.freeze({ ...FURNITURE_SPECS, ...ENVIRONMENT_SPECS });
 
 export const WALL_RENDER = Object.freeze({
-  opaqueHeight:34,
-  opaqueY:Object.freeze([-17,17]),
+  opaqueHeight:26,
+  opaqueY:Object.freeze([-13,13]),
   floorUvZoom:1.5,
   broken:Object.freeze({
     leftSourceRect:Object.freeze([0,0,402,724]),
     rightSourceRect:Object.freeze([1772,0,400,724]),
     opaqueY:Object.freeze([273,470]),
-    scale:34/197,
+    scale:26/197,
   }),
   roomFrameNineSliceCandidate:Object.freeze({left:140,top:177,right:151,bottom:193}),
 });

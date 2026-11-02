@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.21.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.22.0';
 
 // Aligned wall shortcuts and retuned heavy glide define a new ruleset; older best keys remain intact.
-export const STAGE = 'studio-shortcuts16-v21';
+export const STAGE = 'studio-wide16-v22';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

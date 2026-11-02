@@ -1,9 +1,10 @@
-import { furnitureVisualBounds } from './assets.js?v=0.18.0';
+import { furnitureVisualBounds } from './assets.js?v=0.22.0';
 
-// Presentation bounds only. World coordinates, colliders and launch energy are
-// unchanged. The default frame trims the room artwork's decorative surround.
-export const DEFAULT_VIEW = Object.freeze({ minX:28.5, maxX:491.5, minY:10, maxY:906 });
-const CENTER = Object.freeze({ x:260, y:458 });
+// Presentation bounds for the shared v22 wide rooms. Projection is uniform:
+// neither furniture artwork nor the physics map is stretched for a viewport.
+// The 1.5-unit side margin includes the full opaque plaster and source shadows.
+export const DEFAULT_VIEW = Object.freeze({ minX:32.5, maxX:487.5, minY:16, maxY:804 });
+const CENTER = Object.freeze({ x:260, y:410 });
 const MARGIN = 2;
 const validView = view => view && ['minX','maxX','minY','maxY'].every(key=>Number.isFinite(view[key]))
   && view.maxX>view.minX && view.maxY>view.minY;
