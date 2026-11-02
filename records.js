@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.24.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.25.0';
 
 // v24 wall resistance and per-body/pair restitution define new rules; prior stage best keys stay intact.
-export const STAGE = 'studio-billiards16-v24';
+export const STAGE = 'studio-fling16-v25';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

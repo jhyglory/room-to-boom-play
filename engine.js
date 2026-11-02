@@ -46,92 +46,35 @@ export const FURNITURE=Object.freeze(REFERENCE_FURNITURE.map(spec=>Object.freeze
 })));
 export const TOTAL_FURNITURE = FURNITURE.length;
 
-// Base material floor drag in this zero-gravity world, per60Hz frame.
-// There is no physical floor normal force; damping is exp(-rate*dt/baseFrame)
-// for both translation and spin. v11 profiles below specialize broad feet and
-// light gliders. These are authored gameplay rates, not SI friction values.
-export const FLOOR_DAMPING = Object.freeze({
-  fabric: .00875, cardboard: .01125, wood: .0055, metal: .003, ceramic: .0075,
-});
-
-// v11 pull energy is shared by every object, so its actual mass/inertia sets
-// the launch response. Heavy appliances stop on broad feet; light lamps and
-// chairs coast, while rough cardboard still dissipates more floor motion.
-// These are authored top-down profiles, not measured SI coefficients.
-export const GLIDE_PROFILES = Object.freeze({
-  sofa: Object.freeze({ floorDamping: .012 }),
-  // Broad upholstery/wardrobe feet still stop sooner than light props. Their
-  // ordinary air drag leaves room for a useful pull between the two rooms.
-  bed: Object.freeze({ floorDamping: .020, frictionAir: .040 }),
-  fridge: Object.freeze({ floorDamping: .040 }),
-  bookcase: Object.freeze({ floorDamping: .010 }),
-  table: Object.freeze({ floorDamping: .0055 }),
-  chair: Object.freeze({ floorDamping: .002 }),
-  boxA: Object.freeze({ floorDamping: .01125, frictionAir: .025 }),
-  boxB: Object.freeze({ floorDamping: .01125, frictionAir: .025 }),
-  lamp: Object.freeze({ floorDamping: .001 }),
-  plant: Object.freeze({ floorDamping: .0075 }),
-  armchair: Object.freeze({ floorDamping: .010 }),
-  wardrobe: Object.freeze({ floorDamping: .020, frictionAir: .040 }),
-  dresser: Object.freeze({ floorDamping: .014 }),
-  tv_stand: Object.freeze({ floorDamping: .0055 }),
-  desk: Object.freeze({ floorDamping: .009 }),
-  washing_machine: Object.freeze({ floorDamping: .040 }),
-});
-
-// v18 moderates elastic contacts while retaining distinct upholstery, wood,
-// cardboard and appliance responses. These are authored game coefficients;
-// FURNITURE keeps the historical material baseline, not a claim of SI values.
-export const V23_BOUNCE_PROFILES = Object.freeze({
-  sofa: .62, bed: .52, fridge: .60, bookcase: .58, table: .66,
-  chair: .70, boxA: .64, boxB: .64, lamp: .72, plant: .68,
-  armchair: .63, wardrobe: .54, dresser: .56, tv_stand: .62,
-  desk: .65, washing_machine: .59,
-});
-
-// A coefficient is a ratio of separating to approaching normal speed, not a
-// velocity boost. Stay below one so a bank or a chain cannot create energy.
-export const BOUNCE_TUNING = Object.freeze({
-  reducedIds: Object.freeze(['lamp','boxA','boxB','chair']),
-  reducedScale: 1 / 1.3, ordinaryScale: 1.5, maximum: .98,
-});
-const bounceScale = id => BOUNCE_TUNING.reducedIds.includes(id)
-  ? BOUNCE_TUNING.reducedScale : BOUNCE_TUNING.ordinaryScale;
+// v25 separates launch weight from inertia and material glide. Values for the
+// original ten analogues were checked against Pull & Move on2026-11-03.
+// Added furniture keeps its existing material analogues. No extra floor brake:
+// a heavy low-drag appliance can carry momentum farther than a rough light box.
+export const FLOOR_DAMPING = Object.freeze({ fabric:0,cardboard:0,wood:0,metal:0,ceramic:0 });
+export const GLIDE_PROFILES = Object.freeze(Object.fromEntries(
+  FURNITURE.map(spec=>[spec.id,Object.freeze({floorDamping:0,frictionAir:spec.frictionAir})]),
+));
 export const BOUNCE_PROFILES = Object.freeze(Object.fromEntries(
-  Object.entries(V23_BOUNCE_PROFILES).map(([id,value]) =>
-    [id,Math.min(BOUNCE_TUNING.maximum,value*bounceScale(id))]),
+  FURNITURE.map(spec=>[spec.id,spec.restitution]),
 ));
 export const WALL_BOUNCE_PROFILES = Object.freeze(Object.fromEntries(
-  Object.keys(V23_BOUNCE_PROFILES).map(id =>
-    // The existing .86 wall already makes a clear bank. Keep its plaster
-    // dissipation for ordinary pieces: multiplying it by1.5 would require
-    // e>1 and, after clamping, almost eliminate useful medium-hit cracks.
-    [id,.86*(BOUNCE_TUNING.reducedIds.includes(id)?BOUNCE_TUNING.reducedScale:1)]),
+  FURNITURE.map(spec=>[spec.id,.7]),
 ));
 export function contactRestitution(a,b) {
   if(a.game?.kind && b.isStatic) return WALL_BOUNCE_PROFILES[a.game.kind];
   if(b.game?.kind && a.isStatic) return WALL_BOUNCE_PROFILES[b.game.kind];
-  const bounded = body => Math.max(0,Math.min(BOUNCE_TUNING.maximum,body.restitution||0));
-  // Symmetric material mixing: a springier partner cannot erase the reduced
-  // response of a box/lamp/lavender chair, as Matter's default max() did.
-  return Math.sqrt(bounded(a)*bounded(b));
+  // The reference uses Matter's maximum material mixing. The contact solver
+  // below remains passive and respects the actual normal, masses and inertia.
+  return Math.max(0,Math.min(.7,Math.max(a.restitution||0,b.restitution||0)));
 }
-
-// Springy contact faces couple to an existing plaster crack more effectively.
-// This lowers the physical work needed for that kind of impact; it never adds
-// kinetic energy or multiplies the work released by a surviving rebound.
+// Plaster no longer becomes secretly weaker because a prop has high bounce.
+// Actual normal kinetic energy determines the physical work available.
 export const WALL_BREAK_PROFILES = Object.freeze(Object.fromEntries(
-  Object.entries(V23_BOUNCE_PROFILES).map(([id,bounce]) => [id,Object.freeze({
-    resistanceScale: 1 - .5 * Math.max(0,Math.min(1,(bounce-.52)/.20)),
-  })]),
+  FURNITURE.map(spec=>[spec.id,Object.freeze({resistanceScale:1})]),
 ));
-
-// Original-game constants are historical reference values. v11's spring-energy
-// launch is authored here, retaining the bounded pull distance and material mass.
-// https://www.zounoashi.com/games/hikkoshi/index.html (read 2026-10-28).
-const REFERENCE_SCALE = 760 / 540;
+const REFERENCE_SCALE = WORLD.width / 540;
 export const REFERENCE_LAUNCH = Object.freeze({
-  pullGain: .13,
+  pullGain: .13, weightExponent: .45,
   launchCap: 24 * REFERENCE_SCALE,
   speedCap: 26 * REFERENCE_SCALE,
   minimumLaunch: 1.5 * REFERENCE_SCALE,
@@ -142,11 +85,11 @@ export const PHYSICS = Object.freeze({
   stepMs: 1000 / 240,
   floorBaseMs: 1000 / 60,
   massMultiplier: MASS_MULTIPLIER,
-  speedCap: 60,
-  maxLaunchEnergy: 3000,
-  minimumLaunch: REFERENCE_LAUNCH.minimumLaunch / Math.sqrt(MASS_MULTIPLIER),
+  speedCap: REFERENCE_LAUNCH.speedCap,
+  minimumLaunch: REFERENCE_LAUNCH.minimumLaunch,
   maxPull: 180,
-  angularCap: .15,
+  angularCap: .12,
+  launchTorqueScale: .35,
   spinDamping: .02,
   wallSegmentLength: 76,
   // Strong real energy may open an intact panel; medium contacts crack and rebound.
@@ -154,17 +97,18 @@ export const PHYSICS = Object.freeze({
   weakWallHealth: 1.5,
   // Local plaster calibration in Matter mass * base-frame velocity squared.
   // These resistance values are authored here, not copied from the reference.
-  // v24: +20% fracture work and onset energy, independently of new bounce.
+  // Retain v24 physical fracture work. v25 restores a direct normal-speed
+  // onset so useful contacts visibly crack without pressure farming.
   wallEnergyPerHealth: 84,
   wallElasticEnergy: 72,
   wallEnergyTransfer: .65,
-  wallRestitution: .86,
+  wallRestitution: .7,
   wallIntactEnergyPerHealth: 240,
   wallIntactMinEnergy: 900,
   wallFriction: .02,
   contactReboundMinSpeed: .8,
-  wallMinClosingSpeed: 2.5,
-  wallMinImpactEnergy: 540,
+  wallMinClosingSpeed: 3.2 * REFERENCE_SCALE,
+  wallMinImpactEnergy: 90,
   wallMinNormalFraction: .35,
   wallMinExitSpeed: 2.5,
   wallRearmDistance: 12,
@@ -237,7 +181,8 @@ export class MovingWorld {
       this.M.Body.setMass(body,referenceBody.mass);
       body.game = { ...spec, frictionAir: body.frictionAir, restitution: body.restitution, mass: body.mass, massMultiplier: PHYSICS.massMultiplier,
         minimumLaunchSpeed: PHYSICS.minimumLaunch,
-        maxLaunchSpeed: Math.sqrt(2 * PHYSICS.maxLaunchEnergy / body.mass),
+        maxLaunchSpeed: Math.min(PHYSICS.speedCap, REFERENCE_LAUNCH.launchCap / spec.heavy ** REFERENCE_LAUNCH.weightExponent),
+        maxLaunchEnergy: .5 * body.mass * Math.min(PHYSICS.speedCap, REFERENCE_LAUNCH.launchCap / spec.heavy ** REFERENCE_LAUNCH.weightExponent) ** 2,
         floorDamping: GLIDE_PROFILES[spec.id].floorDamping ?? FLOOR_DAMPING[spec.material], delivered: false, settled: 0,
         deliveryState: 'outside', deliveryProtrusion: 0, impact: 0 };
       return body;
@@ -383,11 +328,14 @@ export class MovingWorld {
     const anchor = this.anchor;
     this.release();
     if (!aim.power) return false;
-    const energy = PHYSICS.maxLaunchEnergy * aim.power * aim.power;
+    const energy = body.game.maxLaunchEnergy * aim.power * aim.power;
     // A single impulse at the actual grip shares spring energy between linear
     // and angular motion. Off-centre grabs cannot add free rotational energy.
     const arm = this.M.Vector.rotate(anchor, body.angle);
-    const lever = this.M.Vector.cross(arm, aim.vector);
+    // A controlled grip torque preserves angle play without spending most of a
+    // small prop's launch on spin. Unlike the reference's random release spin,
+    // the same grip and pull are deterministic. This is an authored adaptation.
+    const lever = this.M.Vector.cross(arm, aim.vector) * PHYSICS.launchTorqueScale;
     const inverseEffectiveMass = body.inverseMass + lever * lever * body.inverseInertia;
     const impulse = Math.sqrt(2 * energy / inverseEffectiveMass);
     const speed = impulse * body.inverseMass;
@@ -634,9 +582,8 @@ export class MovingWorld {
     // passive rebound. Strong hits instead pay the whole remaining fracture
     // cost and pass through. Never credit the same energy to cracks and bounce.
     const dissipatedNormalEnergy=(1-pair.restitution*pair.restitution)*coupledEnergy;
-    // The extra loss of a less-bouncy prop belongs to its compliant material,
-    // not bonus plaster damage. Lowering lamp/box bounce must not undo the
-    // requested20% increase in wall work.
+    // Only actual lost normal energy is available for a surviving crack.
+    // A different furniture material cannot mint extra plaster work.
     const plasterWorkBudget=(1-PHYSICS.wallRestitution**2)*coupledEnergy;
     // Strong enough real normal energy can nucleate a local opening on the
     // first impact. Medium contacts spend only passive rebound loss on cracks.
