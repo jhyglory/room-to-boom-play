@@ -1,12 +1,12 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.26.0';
-import { GameRenderer } from './render.js?v=0.26.0';
-import { WALL_RENDER } from './assets.js?v=0.26.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.27.0';
+import { GameRenderer } from './render.js?v=0.27.0';
+import { WALL_RENDER } from './assets.js?v=0.27.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.26.0';
+import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.27.0';
 import { GameAudio } from './audio.js?v=0.18.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.26.0';
-import { LEADERBOARD_MODE } from './runtime-config.js?v=0.19.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.27.0';
+import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.27.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
 function readSetting(key){try{return storage()?.getItem(key);}catch{return null;}}
@@ -49,7 +49,7 @@ let phase = 'menu';
 let reducedMotion = readSetting('room-to-boom:motion') === 'true' || (readSetting('room-to-boom:motion') !== 'false' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 let muted = readSetting('room-to-boom:muted') === 'true';
 const audio = new GameAudio({muted,onStateChange:updateSound});
-const leaderboard = new LeaderboardClient({storage:storage(),fetch:window.fetch?.bind(window),serverEnabled:LEADERBOARD_MODE!=='device'});
+const leaderboard = new LeaderboardClient({storage:storage(),fetch:window.fetch?.bind(window),serverEnabled:LEADERBOARD_MODE!=='device',apiBase:LEADERBOARD_API_BASE,timeoutMs:LEADERBOARD_API_BASE?8000:2500});
 let best = readBest(storage());
 const pageUrl = window.location?.href || 'https://room-to-boom.tart-gecko-8925.chatgpt.site/';
 const challenge = parseChallenge(pageUrl);
@@ -263,12 +263,18 @@ function paintLeaderboard(board){
   }
   $('result-board').innerHTML=renderLeaderboardHTML(board);
   $('result-board').setAttribute('data-count',String(board.top.length));
-  $('result-scope').textContent=board.scope==='server'?'This server':'On this device';
-  $('result-total').textContent=`${board.total} ${board.total===1?'player':'players'}`;
-  $('result-my-rank').textContent=board.me?`${rankLabel(board.me)} / ${board.total}`:'No rank yet';
+  const shared=board.scope==='server';
+  $('rankings-title').textContent=shared?'RANKINGS':'PERSONAL RECORD';
+  $('result-ranking-title').textContent=shared?'Rankings':'My record';
+  $('result-scope').textContent=shared?'This server':'On this device';
+  $('result-total').textContent=shared?`${board.total} ${board.total===1?'player':'players'}`
+    :`${board.total} saved ${board.total===1?'record':'records'}`;
+  $('result-my-rank').textContent=shared?(board.me?`${rankLabel(board.me)} / ${board.total}`:'No rank yet')
+    :(board.me?'Local record':'No saved record');
   $('result-my-time').textContent=board.me?`${board.me.seconds.toFixed(2)}s`:'—';
   $('result-sync-state').textContent=board.syncError?'Offline. Showing your saved record on this device.':'';
-  $('result-load-state').textContent=board.syncError?'Offline. Showing your saved record on this device.':'';
+  $('result-load-state').textContent=board.syncError?'Offline. Showing your saved record on this device.'
+    :shared?'':'Records are saved in this browser only. A shared leaderboard is not connected.';
   paintCompletionRecord();
   paintNickname();
 }
@@ -562,6 +568,7 @@ window.addEventListener('resize',()=>{renderer.resize();syncSettingsLayout();});
 syncSettingsLayout();
 $('motion').setAttribute('aria-pressed',String(reducedMotion));
 document.body.classList.toggle('reduce-motion',reducedMotion);
+if(LEADERBOARD_MODE==='device')$('view-rankings').textContent='MY RECORD';
 updateBest();updateSound();updateTimer(performance.now());
 $('challenge-badge').hidden=!challenge;
 if(challenge)$('challenge-time').textContent=`BEAT ${challenge.seconds.toFixed(2)}s`;

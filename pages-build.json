@@ -1,6 +1,7 @@
 {
-  "version": "0.26.0",
-  "mode": "device",
+  "version": "0.27.0",
+  "mode": "remote",
+  "apiBase": "https://room-to-boom-rankings.jhyglory.chatgpt.site",
   "files": [
     "app.js",
     "assets.js",
@@ -71,7 +72,7 @@
     "vendor/MATTER-LICENSE.txt",
     "vendor/matter.min.js"
   ],
-  "runtimeBytes": 32762105,
+  "runtimeBytes": 32767297,
   "excluded": [
     "data",
     "server.py",

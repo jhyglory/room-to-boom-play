@@ -103,6 +103,8 @@ export const PHYSICS = Object.freeze({
   wallEnergyPerHealth: 84,
   wallElasticEnergy: 72,
   wallEnergyTransfer: .65,
+  // Uniform half-strength destruction; motion and contact energy stay real.
+  wallDamageScale: .5,
   wallRestitution: .7,
   wallIntactEnergyPerHealth: 240,
   wallIntactMinEnergy: 900,
@@ -572,17 +574,18 @@ export class MovingWorld {
     const before=wall.game.health;
     const wasCracked=wall.game.cracked;
     const resistanceScale=WALL_BREAK_PROFILES[body.game.kind].resistanceScale;
-    const workPerHealth=PHYSICS.wallEnergyPerHealth*resistanceScale/PHYSICS.wallEnergyTransfer;
+    const damageScale=PHYSICS.wallDamageScale;
+    const workPerHealth=PHYSICS.wallEnergyPerHealth*resistanceScale/(PHYSICS.wallEnergyTransfer*damageScale);
     // The onset threshold has a per-kind characteristic-speed response, while
     // the absolute normal-speed and angle guards reject slow taps and skims.
-    const minimumImpactEnergy=PHYSICS.wallMinImpactEnergy*resistanceScale**2;
+    const minimumImpactEnergy=PHYSICS.wallMinImpactEnergy*resistanceScale**2/damageScale;
     const normalFraction=speed/(Vector.magnitude(contact.relativeContactVelocity)||1);
     const meaningful=speed>=PHYSICS.wallMinClosingSpeed && coupledEnergy>=minimumImpactEnergy
       && normalFraction>=PHYSICS.wallMinNormalFraction;
     const availableWork=meaningful ? Math.max(0,coupledEnergy-PHYSICS.wallElasticEnergy-reserve) : 0;
     const remainingWork=before*workPerHealth;
     const intactEnergy=Math.max(wall.game.maxHealth*PHYSICS.wallIntactEnergyPerHealth*resistanceScale,
-      PHYSICS.wallIntactMinEnergy*wall.game.maxHealth/PHYSICS.wallHealth);
+      PHYSICS.wallIntactMinEnergy*wall.game.maxHealth/PHYSICS.wallHealth)/damageScale;
     const canFracture=meaningful && (wasCracked||coupledEnergy>=intactEnergy) && availableWork>=remainingWork;
     // A surviving panel can only receive crack work actually dissipated by the
     // passive rebound. Strong hits instead pay the whole remaining fracture
@@ -603,7 +606,7 @@ export class MovingWorld {
     wall.game.impact=intensity;
     const info={point,normal,velocity:{...velocity},angularVelocity,contactArm:arm,
       intensity,speed,energy,coupledEnergy,effectiveMass,damage,damageWork,remainingHealth:wall.game.health,
-      resistanceScale,workPerHealth,minimumImpactEnergy,intactEnergy,normalFraction,meaningful,
+      resistanceScale,damageScale,workPerHealth,minimumImpactEnergy,intactEnergy,normalFraction,meaningful,
       firstCrack:!wasCracked&&damage>0,
       bodyId:body.game.id,material:body.game.material,heavy:body.game.heavy,kind:body.game.kind,
       broken:wall.game.health<=.000001,fractureWork:0,exitSpeed:0,restitution:pair.restitution};

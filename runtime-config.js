@@ -1,2 +1,3 @@
-// GitHub Pages has no Python ranking API.
-export const LEADERBOARD_MODE = 'device';
+// Public storage configuration; no credentials are embedded.
+export const LEADERBOARD_MODE = "remote";
+export const LEADERBOARD_API_BASE = "https://room-to-boom-rankings.jhyglory.chatgpt.site";

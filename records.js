@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.26.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.27.0';
 
 // v24 wall resistance and per-body/pair restitution define new rules; prior stage best keys stay intact.
-export const STAGE = 'studio-triple16-v26';
+export const STAGE = 'studio-triple-half16-v27';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

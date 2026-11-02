@@ -1,7 +1,16 @@
-import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.26.0';
+import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.27.0';
 
 const PLAYER_KEY = 'room-to-boom:player-id';
 const NAME_KEY = 'room-to-boom:nickname';
+function remoteBase(value) {
+  if(value==='')return '';
+  let url;
+  try{url=new URL(value);}catch{throw new TypeError('Invalid leaderboard API base');}
+  if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)
+    throw new TypeError('Invalid leaderboard API base');
+  return url.href.replace(/\/+$/,'');
+}
+function validToken(value){return typeof value==='string'&&/^[A-Za-z0-9._~-]{1,512}$/.test(value);}
 export function cleanNickname(value) {
   const text = String(value ?? '').normalize('NFC').replace(/[\x00-\x1f\x7f]/g, '').replace(/\s+/g, ' ').trim();
   return Array.from(text).slice(0, 16).join('') || 'Player';
@@ -56,9 +65,17 @@ export function validateBoard(value) {
 }
 
 export class LeaderboardClient {
-  constructor({storage,fetch:fetcher,timeoutMs=2500,serverEnabled=true}={}) {
+  constructor({storage,fetch:fetcher,timeoutMs=2500,serverEnabled=true,apiBase='',locks=globalThis.navigator?.locks}={}) {
     this.storage=storage;this.fetcher=fetcher;this.timeoutMs=timeoutMs;this.serverEnabled=serverEnabled;
-    this.playerId=this.read(PLAYER_KEY)||makeSubmissionId();this.write(PLAYER_KEY,this.playerId);
+    this.apiBase=remoteBase(apiBase);this.apiOrigin=this.apiBase?new URL(this.apiBase).origin:null;this.locks=locks;
+    const authPrefix=this.apiOrigin?`room-to-boom:remote:${this.apiOrigin}:`:null;
+    this.playerKey=authPrefix?`${authPrefix}player-id`:PLAYER_KEY;
+    this.tokenKey=authPrefix?`${authPrefix}token`:null;
+    this.pendingNameKey=authPrefix?`${authPrefix}pending-nickname`:null;
+    this.pendingRemoteNickname=this.pendingNameKey?this.read(this.pendingNameKey)||null:null;
+    const savedToken=this.tokenKey?this.read(this.tokenKey):null;
+    this.token=validToken(savedToken)?savedToken:null;
+    this.playerId=this.read(this.playerKey)||makeSubmissionId();this.write(this.playerKey,this.playerId);
     const savedName=this.read(NAME_KEY);
     this.nickname=cleanNickname(savedName);
     this.hasNickname=this.read('room-to-boom:nickname-set')==='true'||!!savedName&&!['Player','플레이어'].includes(this.nickname);
@@ -70,20 +87,65 @@ export class LeaderboardClient {
   setNickname(value){this.nickname=cleanNickname(value);this.hasNickname=true;this.write(NAME_KEY,this.nickname);this.write('room-to-boom:nickname-set','true');return this.nickname;}
   adoptProfile(profile){
     if(!profile||profile.scope!=='server'||typeof profile.playerId!=='string'||!profile.playerId||typeof profile.nickname!=='string')throw new Error('Invalid profile');
-    this.playerId=profile.playerId;this.write(PLAYER_KEY,this.playerId);
+    if(this.apiBase){
+      if(profile.token!==undefined){
+        if(!validToken(profile.token))throw new Error('Invalid profile credential');
+        this.token=profile.token;this.write(this.tokenKey,this.token);
+      }
+      if(!this.token)throw new Error('Missing profile credential');
+    }
+    this.playerId=profile.playerId;this.write(this.playerKey,this.playerId);
     this.nickname=cleanNickname(profile.nickname);this.write(NAME_KEY,this.nickname);
     if(!['Player','플레이어'].includes(this.nickname)){this.hasNickname=true;this.write('room-to-boom:nickname-set','true');}
-    this.profile={...profile,nickname:this.nickname};return this.profile;
+    // The bearer credential belongs only to this API origin's private storage.
+    // Profile consumers and rendered boards receive public identity fields only.
+    const {token,...publicProfile}=profile;
+    this.profile={...publicProfile,nickname:this.nickname};return this.profile;
   }
   adoptBoard(board){
     if(board.playerId)this.adoptProfile({scope:'server',playerId:board.playerId,nickname:board.nickname??board.me?.nickname??this.nickname});
     else if(board.me)this.adoptProfile({scope:'server',playerId:board.me.playerId,nickname:board.me.nickname});
-    return board;
+    const {token,...publicBoard}=board;
+    return publicBoard;
   }
   enqueue(action){const pending=this.pending.then(action,action);this.pending=pending.catch(()=>{});return pending;}
+  reloadRemoteIdentity(){
+    if(!this.apiBase)return;
+    const token=this.read(this.tokenKey);
+    if(validToken(token)&&token!==this.token){
+      this.token=token;this.profile=null;
+      this.playerId=this.read(this.playerKey)||this.playerId;
+    }
+  }
   async ensureProfile(){
-    if(this.profile)return this.profile;
-    if(!this.profilePromise)this.profilePromise=this.request('./api/profile').then(value=>this.adoptProfile(value)).finally(()=>{this.profilePromise=null;});
+    this.reloadRemoteIdentity();
+    if(this.profile&&!this.pendingRemoteNickname)return this.profile;
+    if(!this.profilePromise){
+      const establish=async()=>{
+        // Another tab may have established this browser's identity while this
+        // tab was waiting. Reload inside the origin-wide lock before any GET.
+        this.reloadRemoteIdentity();
+        if(this.profile&&!this.pendingRemoteNickname)return this.profile;
+        const preferredName=this.hasNickname?this.nickname:null;
+        const incoming=await this.request('./api/profile');
+        // Reusing an explicit nickname for a newly issued anonymous identity
+        // does not import any local time or turn a rename into a completion.
+        if(this.apiBase&&incoming.token!==undefined&&preferredName&&preferredName!==cleanNickname(incoming.nickname)){
+          this.pendingRemoteNickname=preferredName;this.write(this.pendingNameKey,preferredName);
+        }
+        this.adoptProfile(incoming);
+        if(this.apiBase&&this.pendingRemoteNickname){
+          try{
+            this.adoptProfile(await this.request('./api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:this.pendingRemoteNickname})}));
+            this.pendingRemoteNickname=null;this.write(this.pendingNameKey,'');
+          }catch(error){this.profile=null;throw error;}
+        }
+        return this.profile;
+      };
+      const pending=this.apiBase&&typeof this.locks?.request==='function'
+        ?this.locks.request(`room-to-boom:identity:${this.apiOrigin}`,establish):establish();
+      this.profilePromise=Promise.resolve(pending).finally(()=>{this.profilePromise=null;});
+    }
     return this.profilePromise;
   }
   localBoard(seconds) {
@@ -96,10 +158,21 @@ export class LeaderboardClient {
   async request(path,options={}) {
     if(!this.serverEnabled)throw new Error('Server requests are disabled');
     if(typeof this.fetcher!=='function')throw new Error('Server unavailable');
+    let target=path,requestOptions={...options,credentials:'same-origin'};
+    if(this.apiBase){
+      if(typeof path!=='string'||!path.startsWith('./api/'))throw new TypeError('Invalid leaderboard API path');
+      const url=new URL(path,`${this.apiBase}/`),prefix=`${new URL(this.apiBase).pathname.replace(/\/+$/,'')}/api/`;
+      if(url.origin!==this.apiOrigin||!url.pathname.startsWith(prefix))throw new TypeError('Invalid leaderboard API path');
+      target=url.href;
+      const headers=new Headers(options.headers);
+      headers.delete('Authorization');
+      if(this.token)headers.set('Authorization',`Bearer ${this.token}`);
+      requestOptions={...options,headers:Object.fromEntries(headers),credentials:'omit',cache:'no-store'};
+    }
     const controller=new AbortController();let timer;
     try {
       const response=await Promise.race([
-        this.fetcher(path,{...options,credentials:'same-origin',signal:controller.signal}),
+        this.fetcher(target,{...requestOptions,signal:controller.signal}),
         new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('Request timed out'));},this.timeoutMs);}),
       ]);
       if(!response.ok)throw new Error(`Request failed (${response.status})`);
@@ -169,13 +242,14 @@ function avatarHTML(entry){
     : '<span class="result-avatar result-avatar-empty" aria-hidden="true">·</span>';
 }
 export function renderLeaderboardHTML(board) {
-  const actual=board.top;
-  if(!actual.length)return '<p class="result-empty">No records yet. Be the first to finish!</p>';
+  const actual=board.top,personal=board.scope==='browser';
+  if(!actual.length)return personal?'<p class="result-empty">No saved record in this browser yet.</p>'
+    :'<p class="result-empty">No records yet. Be the first to finish!</p>';
   const first=actual.slice(0,3),order=first.length>=2?[1,0,...(first.length===3?[2]:[])]:[0];
   const podium=order.map(index=>{
     const entry=first[index],modifier=['first','second','third'][index];
-    return `<li class="result-podium-place result-podium-${modifier}${entry.isMe?' is-self':''}" data-player-id="${escapeHTML(entry.playerId)}"${entry.isMe?' aria-current="true"':''}><span class="result-podium-medal">${entry.rank}</span>${entry.tied?`<span class="result-tie-label">${rankLabel(entry)}</span>`:''}${avatarHTML(entry)}<strong class="result-player-name">${escapeHTML(entry.nickname)}${entry.isMe?'<small>You</small>':''}</strong><span class="result-player-time">${timeHTML(entry.seconds)}</span></li>`;
+    return `<li class="result-podium-place result-podium-${modifier}${entry.isMe?' is-self':''}" data-player-id="${escapeHTML(entry.playerId)}"${entry.isMe?' aria-current="true"':''}><span class="result-podium-medal">${personal?'PB':entry.rank}</span>${entry.tied?`<span class="result-tie-label">${rankLabel(entry)}</span>`:''}${avatarHTML(entry)}<strong class="result-player-name">${escapeHTML(entry.nickname)}${entry.isMe?'<small>You</small>':''}</strong><span class="result-player-time">${timeHTML(entry.seconds)}</span></li>`;
   }).join('');
   const rows=actual.slice(3).map(entry=>`<div class="result-table-row${entry.isMe?' is-self':''}" role="row" data-player-id="${escapeHTML(entry.playerId)}"${entry.isMe?' aria-current="true"':''}><span class="result-rank-number" role="cell">${rankLabel(entry)}</span><span class="result-table-player" role="cell">${avatarHTML(entry)}<strong class="result-player-name">${escapeHTML(entry.nickname)}${entry.isMe?'<small>You</small>':''}</strong></span><span class="result-player-time" role="cell">${timeHTML(entry.seconds)}</span></div>`).join('');
-  return `<ol class="result-podium" data-count="${first.length}" aria-label="Top ${first.length} players">${podium}</ol>${rows?`<div class="result-table" role="table" aria-label="More leaderboard records"><div class="result-table-head" role="row"><span role="columnheader">Rank</span><span role="columnheader">Player</span><span role="columnheader">Time</span></div><div class="result-table-rows" role="rowgroup" tabindex="0" aria-label="Leaderboard list">${rows}</div></div>`:''}`;
+  return `<ol class="result-podium" data-count="${first.length}" aria-label="${personal?'Personal best on this browser':`Top ${first.length} players`}">${podium}</ol>${rows?`<div class="result-table" role="table" aria-label="More leaderboard records"><div class="result-table-head" role="row"><span role="columnheader">Rank</span><span role="columnheader">Player</span><span role="columnheader">Time</span></div><div class="result-table-rows" role="rowgroup" tabindex="0" aria-label="Leaderboard list">${rows}</div></div>`:''}`;
 }
