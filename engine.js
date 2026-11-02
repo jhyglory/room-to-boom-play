@@ -35,8 +35,9 @@ export const REFERENCE_FURNITURE = Object.freeze([
 ]);
 const FURNITURE_SCALE=.85;
 const PORTRAIT_LAYOUT=Object.freeze({
-  bed:[169,477],boxA:[260,477],fridge:[323,477],washing_machine:[391,477],
-  wardrobe:[142,565],desk:[243,565],bookcase:[333,565],plant:[399,565],
+  // Exchange the top rows, clearing both the tall wardrobe and painted wall.
+  wardrobe:[142,481],desk:[243,481],bookcase:[333,481],plant:[399,481],
+  bed:[169,568],boxA:[260,568],fridge:[323,568],washing_machine:[391,568],
   // Swap the lower two rows while retaining their own horizontal spacing.
   // The sofa's full soft artwork extends42.11 below its pivot. These rows
   // clear both that artwork and the actual TV-stand/armchair colliders.
@@ -106,8 +107,8 @@ export const PHYSICS = Object.freeze({
   wallEnergyPerHealth: 84,
   wallElasticEnergy: 72,
   wallEnergyTransfer: .65,
-  // Uniform half-strength destruction; motion and contact energy stay real.
-  wallDamageScale: .5,
+  // v29 needs1.5 times the former wall work; furniture motion stays unchanged.
+  wallDamageScale: 1/3,
   wallRestitution: .7,
   wallIntactEnergyPerHealth: 240,
   wallIntactMinEnergy: 900,

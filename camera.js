@@ -1,4 +1,4 @@
-import { furnitureVisualBounds } from './assets.js?v=0.28.0';
+import { furnitureVisualBounds } from './assets.js?v=0.29.0';
 
 // Presentation bounds for the shared v22 wide rooms. Projection is uniform:
 // neither furniture artwork nor the physics map is stretched for a viewport.

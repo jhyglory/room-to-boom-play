@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.28.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.29.0';
 
-// v28 swaps the lower furniture rows; prior layout records and player identities stay intact.
-export const STAGE = 'studio-triple-swap16-v28';
+// v29 swaps the top furniture rows and increases wall resistance1.5×; prior records and identities stay intact.
+export const STAGE = 'studio-triple-top-swap16-v29';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;
