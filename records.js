@@ -1,4 +1,4 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.22.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.23.0';
 
 // Aligned wall shortcuts and retuned heavy glide define a new ruleset; older best keys remain intact.
 export const STAGE = 'studio-wide16-v22';

@@ -1,6 +1,8 @@
-import { WORLD } from './engine.js?v=0.22.0';
-import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.22.0';
-import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.22.0';
+import { WORLD } from './engine.js?v=0.23.0';
+import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.23.0';
+import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.23.0';
+import { ImpactBursts } from './impact-burst.js?v=0.23.0';
+import { FurnitureImpacts } from './furniture-impact.js?v=0.23.0';
 
 const WIDTH = WORLD.width;
 const HEIGHT = WORLD.height;
@@ -87,6 +89,9 @@ export class GameRenderer {
     this.effectTime = 0;
     this.wallDamageHints = new Map();
     this.completedWallBreaks = new Set();
+    this.impactBursts = new ImpactBursts();
+    this.furnitureImpacts = new FurnitureImpacts();
+    this.impactPhysicsMs = Number.isFinite(world.elapsedMs) ? world.elapsedMs : null;
     this.scenery = null;
     this.lastNow = 0;
     this.bounds = { left: 0, top: 0, width: WIDTH, height: HEIGHT };
@@ -206,8 +211,8 @@ export class GameRenderer {
   wallImpactInfo(wall, info) {
     const intensity = Number.isFinite(info.intensity) ? Math.max(.08, Math.min(1, info.intensity)) : 1;
     const point = info.point || wall.position;
-    const x = Math.max(25, Math.min(WIDTH - 25, point.x));
-    const y = Math.max(25, Math.min(HEIGHT - 25, point.y));
+    const x = point.x;
+    const y = point.y;
     const velocity = info.velocity || info.normal || { x: 0, y: -1 };
     const magnitude = Math.hypot(velocity.x, velocity.y) || 1;
     const referenceSpeed = Number.isFinite(info.referenceSpeed) ? info.referenceSpeed
@@ -215,13 +220,53 @@ export class GameRenderer {
     return { x, y, intensity, referenceSpeed, direction: { x: velocity.x / magnitude, y: velocity.y / magnitude } };
   }
 
+  ensureImpactEffects() {
+    this.impactBursts ||= new ImpactBursts();
+    this.furnitureImpacts ||= new FurnitureImpacts();
+  }
+
+  advanceImpactEffects(fallbackDt = 0) {
+    this.ensureImpactEffects();
+    const now = this.world.elapsedMs;
+    // Catch-up may contain several collisions. Age an older hit up to the
+    // current physical event, not by the whole render gap after a fresh hit.
+    // This reads the engine clock; it never stops or advances that clock.
+    const dt = Number.isFinite(now) ? Math.max(0, now - (this.impactPhysicsMs ?? now)) / 1000 : fallbackDt;
+    this.impactPhysicsMs = Number.isFinite(now) ? now : null;
+    this.impactBursts.update(dt);
+    this.furnitureImpacts.update(dt);
+  }
+
+  addFurnitureImpact(body, info = {}) {
+    this.advanceImpactEffects();
+    return this.furnitureImpacts.add(body, info);
+  }
+
+  addWallResponse(wall, info, hit) {
+    this.advanceImpactEffects();
+    // Neighboring panels struck by this one body share one dust front. Each
+    // wall still owns its independent physical damage and cleared footprint.
+    const sourceId = `${info.bodyId || 'piece'}:${wall.game?.group || wall.game?.id || 'wall'}`;
+    const event = { ...info, ...hit, normal: info.normal || hit.direction,
+      velocity: info.velocity, sourceId, wallId: wall.game?.id,
+      eventTime: Number.isFinite(this.world.elapsedMs) ? this.world.elapsedMs : undefined };
+    const burst = this.impactBursts.add(event);
+    const body = (this.world.bodies || []).find(item => item.game?.id === info.bodyId);
+    this.addFurnitureImpact(body, event);
+    if (burst && burst.tier !== 'contact') {
+      const intensity = burst.intensity;
+      this.shake = { life: .075, maxLife: .075, amplitude: .65 + intensity * 1.55,
+        intensity, direction: info.normal || hit.direction, seed: .7 };
+    }
+    return burst;
+  }
+
   addWallHit(wall, info = {}) {
     const hit = this.wallImpactInfo(wall, info);
     this.wallDamageHints ||= new Map();
     if (info.firstCrack || info.damage > 0 || info.damaged)
       this.wallDamageHints.set(wall.game?.id, { x: hit.x - wall.position.x, y: hit.y - wall.position.y });
-    return this.addImpact(hit.x, hit.y, hit.referenceSpeed, { ...info,
-      sourceId: `${info.bodyId || 'piece'}:${wall.game?.id || 'wall'}`, normal: info.normal || hit.direction });
+    return this.addWallResponse(wall, info, hit);
   }
 
   addWallPowder(hit, count) {
@@ -243,20 +288,7 @@ export class GameRenderer {
     if (this.completedWallBreaks.has(key)) return false;
     this.completedWallBreaks.add(key);
     const hit = this.wallImpactInfo(wall, info);
-    this.addImpact(hit.x, hit.y, Math.max(3.21, hit.referenceSpeed), { ...info, broken: true,
-      sourceId: `${info.bodyId || 'piece'}:${wall.game?.id || 'wall'}`, normal: info.normal || hit.direction });
-    this.particles.push({ x: hit.x, y: hit.y, vx: hit.direction.x * 38, vy: hit.direction.y * 38,
-      life: .44, maxLife: .44, size: 68 + hit.intensity * 22, angle: (Math.random() - .5) * .28,
-      spin: (Math.random() - .5) * 1.1, sprite: 'wall_debris' });
-    // The supplied debris is one authored cluster of substantial slabs. It
-    // fades within half a second and never creates a Matter body or obstacle.
-    const clusters = this.particles.filter(particle => particle.sprite === 'wall_debris');
-    if (clusters.length > 8) this.particles.splice(this.particles.indexOf(clusters[0]), 1);
-    this.addWallPowder(hit, 7 + Math.round(hit.intensity * 5));
-    this.wallBreaks.push({ ...hit, life: .48, maxLife: .48, collapse: true });
-    if (this.wallBreaks.length > 8) this.wallBreaks.shift();
-    this.shake = { life: .1, maxLife: .1, amplitude: 3.2, intensity: hit.intensity,
-      direction: hit.direction, seed: Math.random() * Math.PI * 2 };
+    this.addWallResponse(wall, { ...info, broken: true }, hit);
     return true;
   }
 
@@ -269,13 +301,21 @@ export class GameRenderer {
     this.effectTime = 0;
     this.wallDamageHints?.clear();
     this.completedWallBreaks?.clear();
+    this.impactBursts?.clear();
+    this.furnitureImpacts?.clear();
+    this.impactPhysicsMs = Number.isFinite(this.world.elapsedMs) ? this.world.elapsedMs : null;
   }
 
   draw(now = performance.now(), { phase = 'ready', reducedMotion = false } = {}) {
     const ctx = this.ctx;
-    const dt = phase === 'playing' && this.lastNow ? Math.max(0, Math.min((now - this.lastNow) / 1000, 0.05)) : 0;
+    const dt = phase === 'playing' && this.lastNow ? Math.max(0, (now - this.lastNow) / 1000) : 0;
     this.lastNow = now;
     this.effectTime = (this.effectTime || 0) + dt * 1000;
+    this.ensureImpactEffects();
+    this.reducedMotion = reducedMotion;
+    this.advanceImpactEffects(dt);
+    if (reducedMotion) this.furnitureImpacts.clear();
+    if (phase === 'complete') { this.impactBursts.clear(); this.furnitureImpacts.clear(); this.shake = null; }
     if (reducedMotion) {
       this.particles = []; this.impacts = []; this.wallBreaks = []; this.shake = null;
     }
@@ -306,6 +346,7 @@ export class GameRenderer {
     }
     this.drawWeakWallMarkers(ctx);
     this.drawRoomPlacards(ctx);
+    this.impactBursts.draw(ctx, { reducedMotion, cssScale: this.cssScale || 1, layer: 'dust' });
 
     const bodies = [...(this.world.bodies || [])];
     bodies.sort((a, b) => a.position.y - b.position.y);
@@ -314,9 +355,10 @@ export class GameRenderer {
     for (const body of bodies) if (body !== grabbed) this.drawFurniture(ctx, body, false, now);
     if (grabbed) {
       this.drawFurniture(ctx, grabbed, true, now);
-      if (phase === 'playing') this.drawAim(ctx, grabbed);
     }
     this.drawEffects(ctx, dt, reducedMotion);
+    this.impactBursts.draw(ctx, { reducedMotion, cssScale: this.cssScale || 1, layer: 'chips' });
+    if (grabbed && phase === 'playing') this.drawAim(ctx, grabbed);
   }
 
   drawStaticScenery(ctx) {
@@ -511,6 +553,17 @@ export class GameRenderer {
       ctx.save(); ctx.beginPath();
       ctx.rect(neighbor.start, y, neighbor.end - neighbor.start, h); ctx.clip();
       ctx.drawImage(image, sx, sy, sw, sh, x, y, w, h);
+      // Paint the surviving cut face only. The dark rim is clipped inside its
+      // real neighbor; neither shadow nor terracotta can narrow the open gap.
+      ctx.beginPath(); ctx.rect(neighbor.start, -WALL_RENDER.opaqueHeight / 2,
+        neighbor.end - neighbor.start, WALL_RENDER.opaqueHeight); ctx.clip();
+      const edge = side === 'left' ? span.start : span.end;
+      const inward = side === 'left' ? -1 : 1;
+      const half = WALL_RENDER.opaqueHeight / 2;
+      stroke(ctx, [[edge + inward * 3.5, -half + 1], [edge + inward * 1.2, -half * .45],
+        [edge + inward * 4, -1], [edge + inward * 1.4, half * .5], [edge + inward * 3.5, half - 1]], '#734837', 2.4);
+      stroke(ctx, [[edge + inward * 6.5, -half + 2], [edge + inward * 5, -2],
+        [edge + inward * 6.5, half - 2]], '#c67d52', 2.6);
       ctx.restore();
     }
   }
@@ -745,7 +798,16 @@ export class GameRenderer {
       rounded(ctx, -w / 2 - 3, -h / 2 - 3, w + 6, h + 6, 10, null, '#efffeb', 1.8);
       ctx.restore();
     }
+    const deformation = this.furnitureImpacts?.transformFor(body,
+      { reducedMotion: this.reducedMotion, aiming: selected });
+    ctx.save();
+    if (deformation?.active) {
+      ctx.rotate(deformation.angle);
+      ctx.transform(deformation.scaleNormal, 0, deformation.shear, deformation.scaleTangent, 0, 0);
+      ctx.rotate(-deformation.angle);
+    }
     this.drawRegisteredSprite(ctx, g.kind);
+    ctx.restore();
     if (g.delivered) {
       ellipse(ctx, w / 2 - 3, -h / 2 + 2, 10, 10, '#e7f2d9', '#7aa17a', 1.8);
       stroke(ctx, [[w / 2 - 8, -h / 2 + 2], [w / 2 - 4, -h / 2 + 6], [w / 2 + 2, -h / 2 - 2]], '#639666', 2.5);

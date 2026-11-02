@@ -1,5 +1,5 @@
 {
-  "version": "0.22.0",
+  "version": "0.23.0",
   "mode": "device",
   "files": [
     "app.js",
@@ -58,6 +58,8 @@
     "fonts/SOURCES.md",
     "fonts/fredoka-bold-latin.woff2",
     "fonts/nunito-latin-variable.woff2",
+    "furniture-impact.js",
+    "impact-burst.js",
     "impact-presentation.js",
     "index.html",
     "leaderboard.js",
@@ -69,7 +71,7 @@
     "vendor/MATTER-LICENSE.txt",
     "vendor/matter.min.js"
   ],
-  "runtimeBytes": 32738958,
+  "runtimeBytes": 32762117,
   "excluded": [
     "data",
     "server.py",

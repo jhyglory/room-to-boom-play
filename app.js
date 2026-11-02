@@ -1,11 +1,11 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.22.0';
-import { GameRenderer } from './render.js?v=0.22.0';
-import { WALL_RENDER } from './assets.js?v=0.22.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.23.0';
+import { GameRenderer } from './render.js?v=0.23.0';
+import { WALL_RENDER } from './assets.js?v=0.23.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.22.0';
+import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.23.0';
 import { GameAudio } from './audio.js?v=0.18.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.22.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.23.0';
 import { LEADERBOARD_MODE } from './runtime-config.js?v=0.19.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -423,6 +423,8 @@ world.onImpact = (body,speed,other,info={}) => {
   const referenceSpeed=(Number.isFinite(speed)?speed:0)/REFERENCE_WORLD_SCALE;
   const point=info.point||body.position;
   renderer.addImpact(point.x,point.y,referenceSpeed,info);
+  renderer.addFurnitureImpact(body,{...info,referenceSpeed,
+    sourceId:info.pairId||[body.id,other?.id].sort((a,b)=>a-b).join(':')});
   audio.collision(referenceSpeed,{point,bodyId:body.game?.id,impactEnergy:info.energy,bounce:info.restitution,sourceId:info.pairId||[body.id,other?.id].sort((a,b)=>a-b).join(':'),material:body.game?.material,otherMaterial:other?.game?.material,heavy:body.game?.heavy,kind:body.game?.kind,wall:Boolean(other?.isStatic)});
 };
 
