@@ -37,8 +37,11 @@ const FURNITURE_SCALE=.85;
 const PORTRAIT_LAYOUT=Object.freeze({
   bed:[169,477],boxA:[260,477],fridge:[323,477],washing_machine:[391,477],
   wardrobe:[142,565],desk:[243,565],bookcase:[333,565],plant:[399,565],
-  sofa:[126,644],armchair:[225,644],dresser:[310,644],table:[405.5,644],
-  chair:[165.5,716],tv_stand:[237.85,716],boxB:[307.65,716],lamp:[360.45,716],
+  // Swap the lower two rows while retaining their own horizontal spacing.
+  // The sofa's full soft artwork extends42.11 below its pivot. These rows
+  // clear both that artwork and the actual TV-stand/armchair colliders.
+  sofa:[126,700],armchair:[225,700],dresser:[310,700],table:[405.5,700],
+  chair:[165.5,642],tv_stand:[237.85,642],boxB:[307.65,642],lamp:[360.45,642],
 });
 export const FURNITURE=Object.freeze(REFERENCE_FURNITURE.map(spec=>Object.freeze({
   ...spec,x:PORTRAIT_LAYOUT[spec.id][0],y:PORTRAIT_LAYOUT[spec.id][1],
