@@ -1,8 +1,8 @@
-import { WORLD } from './engine.js?v=0.25.0';
-import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.25.0';
-import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.25.0';
-import { ImpactBursts } from './impact-burst.js?v=0.25.0';
-import { FurnitureImpacts } from './furniture-impact.js?v=0.25.0';
+import { WORLD } from './engine.js?v=0.26.0';
+import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.26.0';
+import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.26.0';
+import { ImpactBursts } from './impact-burst.js?v=0.26.0';
+import { FurnitureImpacts } from './furniture-impact.js?v=0.26.0';
 
 const WIDTH = WORLD.width;
 const HEIGHT = WORLD.height;
@@ -390,7 +390,7 @@ export class GameRenderer {
     ctx.fillStyle = '#faf4e7'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
     const left = ROOMS.old.minX, right = ROOMS.old.maxX, width = right - left;
     rounded(ctx, left - 14, 20, width + 28, HEIGHT - 45, 14, '#e9e8db', '#d5d5c3', 1);
-    // A quiet, light corridor makes a missing wall segment legible immediately
+    // A quiet transition backdrop makes each missing wall segment legible immediately
     // after the brief dust clears, without a decorative rail in the passage.
     rounded(ctx, left - 9, ROOMS.new.maxY + 9, width + 18,
       ROOMS.old.minY - ROOMS.new.maxY - 18, 8, '#eee9d7', '#d6d0b9', 1);
@@ -451,7 +451,7 @@ export class GameRenderer {
     ctx.save();
     ctx.setLineDash([6, 7]);
     const x = WORLD.doorway.centerX;
-    // A short orientation mark lives entirely in the real free corridor. It is
+    // A short orientation mark stays in the shared central doorway. It is
     // not a trajectory, nor does its placement assume a former wall layout.
     const tipY = WORLD.corridor.minY + 7, tailY = WORLD.corridor.maxY - 7;
     const wingY = tipY + Math.min(8, (tailY - tipY) / 2);

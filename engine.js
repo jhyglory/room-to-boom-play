@@ -10,6 +10,7 @@ export const WORLD = Object.freeze({
   }),
   doorway: Object.freeze({ minX:190,maxX:330,centerX:260 }),
   corridor: Object.freeze({ minY:377,maxY:413 }),
+  separatorRows: Object.freeze([368,395,422]),
 });
 
 export const REFERENCE_FURNITURE = Object.freeze([
@@ -229,6 +230,11 @@ export class MovingWorld {
     wall('new-top-left',64,368,52,18);
     wall('new-weak',140,368,100,18,true);
     wall('new-top-right',406,368,152,18);
+    // A third independent layer fills the transition only. Its central door
+    // stays aligned with both room doors; HP and all v25 motion stay unchanged.
+    wall('middle-left',64,395,52,18);
+    wall('middle-weak',140,395,100,18,true);
+    wall('middle-right',406,395,152,18);
     wall('new-left',47,201,18,352);
     wall('new-right',473,201,18,352);
     wall('new-bottom',260,34,444,18);

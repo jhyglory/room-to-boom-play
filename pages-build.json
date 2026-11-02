@@ -1,5 +1,5 @@
 {
-  "version": "0.25.0",
+  "version": "0.26.0",
   "mode": "device",
   "files": [
     "app.js",
@@ -71,7 +71,7 @@
     "vendor/MATTER-LICENSE.txt",
     "vendor/matter.min.js"
   ],
-  "runtimeBytes": 32761529,
+  "runtimeBytes": 32762105,
   "excluded": [
     "data",
     "server.py",

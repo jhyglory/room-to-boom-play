@@ -1,11 +1,11 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.25.0';
-import { GameRenderer } from './render.js?v=0.25.0';
-import { WALL_RENDER } from './assets.js?v=0.25.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.26.0';
+import { GameRenderer } from './render.js?v=0.26.0';
+import { WALL_RENDER } from './assets.js?v=0.26.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.25.0';
+import { readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.26.0';
 import { GameAudio } from './audio.js?v=0.18.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.25.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel } from './leaderboard.js?v=0.26.0';
 import { LEADERBOARD_MODE } from './runtime-config.js?v=0.19.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -95,10 +95,18 @@ function updateCoach(now){
   if(phase!=='playing'||now>=coachUntil)$('control-coach').hidden=true;
 }
 function hasConnectedShortcut(){
-  const lower=world.walls.filter(w=>w.game.weak&&w.game.broken&&Math.abs(w.position.y-WORLD.rooms.old.minY)<1);
-  const upper=world.walls.filter(w=>w.game.weak&&w.game.broken&&Math.abs(w.position.y-WORLD.rooms.new.maxY)<1);
-  return lower.some(a=>upper.some(b=>Math.min(a.position.x+a.game.w/2,b.position.x+b.game.w/2)
-    -Math.max(a.position.x-a.game.w/2,b.position.x-b.game.w/2)>=44));
+  // An opening is useful only when the same clear span exists through every
+  // separator layer. Breaking the two outer rows must not announce a shortcut
+  // while the new middle layer still blocks it.
+  let spans=[[-Infinity,Infinity]];
+  for(const y of WORLD.separatorRows){
+    const gaps=world.walls.filter(w=>w.game.weak&&w.game.broken&&Math.abs(w.position.y-y)<1)
+      .map(w=>[w.position.x-w.game.w/2,w.position.x+w.game.w/2]);
+    spans=spans.flatMap(([left,right])=>gaps.map(([a,b])=>[Math.max(left,a),Math.min(right,b)])
+      .filter(([a,b])=>b-a>=44));
+    if(!spans.length)return false;
+  }
+  return spans.length>0;
 }
 function updateBest(){
   $('best-time').textContent=best===null?'—':`${best.toFixed(2)}s`;
