@@ -82,18 +82,46 @@ export const GLIDE_PROFILES = Object.freeze({
 // v18 moderates elastic contacts while retaining distinct upholstery, wood,
 // cardboard and appliance responses. These are authored game coefficients;
 // FURNITURE keeps the historical material baseline, not a claim of SI values.
-export const BOUNCE_PROFILES = Object.freeze({
+export const V23_BOUNCE_PROFILES = Object.freeze({
   sofa: .62, bed: .52, fridge: .60, bookcase: .58, table: .66,
   chair: .70, boxA: .64, boxB: .64, lamp: .72, plant: .68,
   armchair: .63, wardrobe: .54, dresser: .56, tv_stand: .62,
   desk: .65, washing_machine: .59,
 });
 
+// A coefficient is a ratio of separating to approaching normal speed, not a
+// velocity boost. Stay below one so a bank or a chain cannot create energy.
+export const BOUNCE_TUNING = Object.freeze({
+  reducedIds: Object.freeze(['lamp','boxA','boxB','chair']),
+  reducedScale: 1 / 1.3, ordinaryScale: 1.5, maximum: .98,
+});
+const bounceScale = id => BOUNCE_TUNING.reducedIds.includes(id)
+  ? BOUNCE_TUNING.reducedScale : BOUNCE_TUNING.ordinaryScale;
+export const BOUNCE_PROFILES = Object.freeze(Object.fromEntries(
+  Object.entries(V23_BOUNCE_PROFILES).map(([id,value]) =>
+    [id,Math.min(BOUNCE_TUNING.maximum,value*bounceScale(id))]),
+));
+export const WALL_BOUNCE_PROFILES = Object.freeze(Object.fromEntries(
+  Object.keys(V23_BOUNCE_PROFILES).map(id =>
+    // The existing .86 wall already makes a clear bank. Keep its plaster
+    // dissipation for ordinary pieces: multiplying it by1.5 would require
+    // e>1 and, after clamping, almost eliminate useful medium-hit cracks.
+    [id,.86*(BOUNCE_TUNING.reducedIds.includes(id)?BOUNCE_TUNING.reducedScale:1)]),
+));
+export function contactRestitution(a,b) {
+  if(a.game?.kind && b.isStatic) return WALL_BOUNCE_PROFILES[a.game.kind];
+  if(b.game?.kind && a.isStatic) return WALL_BOUNCE_PROFILES[b.game.kind];
+  const bounded = body => Math.max(0,Math.min(BOUNCE_TUNING.maximum,body.restitution||0));
+  // Symmetric material mixing: a springier partner cannot erase the reduced
+  // response of a box/lamp/lavender chair, as Matter's default max() did.
+  return Math.sqrt(bounded(a)*bounded(b));
+}
+
 // Springy contact faces couple to an existing plaster crack more effectively.
 // This lowers the physical work needed for that kind of impact; it never adds
 // kinetic energy or multiplies the work released by a surviving rebound.
 export const WALL_BREAK_PROFILES = Object.freeze(Object.fromEntries(
-  Object.entries(BOUNCE_PROFILES).map(([id,bounce]) => [id,Object.freeze({
+  Object.entries(V23_BOUNCE_PROFILES).map(([id,bounce]) => [id,Object.freeze({
     resistanceScale: 1 - .5 * Math.max(0,Math.min(1,(bounce-.52)/.20)),
   })]),
 ));
@@ -126,16 +154,17 @@ export const PHYSICS = Object.freeze({
   weakWallHealth: 1.5,
   // Local plaster calibration in Matter mass * base-frame velocity squared.
   // These resistance values are authored here, not copied from the reference.
-  wallEnergyPerHealth: 70,
-  wallElasticEnergy: 60,
+  // v24: +20% fracture work and onset energy, independently of new bounce.
+  wallEnergyPerHealth: 84,
+  wallElasticEnergy: 72,
   wallEnergyTransfer: .65,
   wallRestitution: .86,
-  wallIntactEnergyPerHealth: 200,
-  wallIntactMinEnergy: 750,
+  wallIntactEnergyPerHealth: 240,
+  wallIntactMinEnergy: 900,
   wallFriction: .02,
   contactReboundMinSpeed: .8,
   wallMinClosingSpeed: 2.5,
-  wallMinImpactEnergy: 450,
+  wallMinImpactEnergy: 540,
   wallMinNormalFraction: .35,
   wallMinExitSpeed: 2.5,
   wallRearmDistance: 12,
@@ -574,7 +603,7 @@ export class MovingWorld {
     const contact=this._wallContact(body,wall,pair);
     if(!contact||contact.speed<=.1)return null;
     const {point,normal,arm,velocity,angularVelocity,speed,lever,effectiveMass,energy}=contact;
-    pair.restitution=Math.max(pair.restitution,PHYSICS.wallRestitution);
+    pair.restitution=contactRestitution(body,wall);
     const key=`${body.id}:${wall.id}`;
     let strike=this._wallStrikes.get(key);
     if(!strike){strike={body,wall,armed:true,retreated:false,at:-Infinity};this._wallStrikes.set(key,strike);}
@@ -605,9 +634,13 @@ export class MovingWorld {
     // passive rebound. Strong hits instead pay the whole remaining fracture
     // cost and pass through. Never credit the same energy to cracks and bounce.
     const dissipatedNormalEnergy=(1-pair.restitution*pair.restitution)*coupledEnergy;
+    // The extra loss of a less-bouncy prop belongs to its compliant material,
+    // not bonus plaster damage. Lowering lamp/box bounce must not undo the
+    // requested20% increase in wall work.
+    const plasterWorkBudget=(1-PHYSICS.wallRestitution**2)*coupledEnergy;
     // Strong enough real normal energy can nucleate a local opening on the
     // first impact. Medium contacts spend only passive rebound loss on cracks.
-    const damageWork=canFracture ? remainingWork : Math.min(remainingWork,availableWork,dissipatedNormalEnergy);
+    const damageWork=canFracture ? remainingWork : Math.min(remainingWork,availableWork,dissipatedNormalEnergy,plasterWorkBudget);
     const damage=Math.min(before,damageWork/workPerHealth);
     wall.game.health=Math.max(0,before-damage);
     wall.game.lastHitEnergy=energy;wall.game.lastHitDamage=damage;
@@ -676,7 +709,8 @@ export class MovingWorld {
       }
       const contact=this._contactInfo(moving,other,pair);
       const speed=Math.max(0,contact.speed);
-      const restitution=Math.max(moving.restitution,other.restitution);
+      const restitution=contactRestitution(moving,other);
+      pair.restitution=restitution;
       const normalImpulse=this._reboundContact(moving,other,pair,contact,restitution);
       if(speed<=1)continue;
       moving.game.impact=Math.min(1,speed/8);
