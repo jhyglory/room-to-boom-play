@@ -1,4 +1,4 @@
-import { WORLD } from './engine.js?v=0.32.0';
+import { WORLD } from './engine.js?v=0.33.0';
 import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.30.0';
 import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.30.0';
 import { ImpactBursts } from './impact-burst.js?v=0.30.0';
@@ -448,7 +448,7 @@ export class GameRenderer {
     if (isNew) {
       const area = WORLD.delivery;
       rounded(ctx, area.minX, area.minY, area.maxX - area.minX, area.maxY - area.minY, 0, '#e2f4d805');
-      // This line marks the actual whole-body destination boundary. It has no
+      // This line marks the floor used for the physical overlap calculation. It has no
       // inset rounded corners that would imply a second delivery rule.
       ctx.setLineDash([8, 8]);
       rounded(ctx, area.minX, area.minY, area.maxX - area.minX, area.maxY - area.minY, 0, null, '#89a986', 1.4);
@@ -835,14 +835,14 @@ export class GameRenderer {
   drawDeliveryHint(ctx, body) {
     const g = body.game;
     if (!g.deliveryState || g.deliveryState === 'moved') return;
-    let label = 'WHOLE PIECE IN MINT ↑';
+    let label = '80% INSIDE MINT ↑';
     let color = '#a8772e';
     if (g.deliveryState === 'settling') {
       label = 'SETTLING · 0.5s'; color = '#5f8c69';
-    } else if (g.deliveryState === 'aiming' && g.deliveryProtrusion === 0) {
+    } else if (g.deliveryState === 'aiming' && g.deliveryOverlap >= .8) {
       label = 'RELEASE TO SETTLE'; color = '#5f8c69';
     } else if (body.position.y <= WORLD.delivery.maxY && g.deliveryProtrusion > 0) {
-      label = 'EDGE OUTSIDE';
+      label = 'BRING 80% INSIDE';
     }
     const x = Math.max(104, Math.min(WIDTH - 104, body.position.x));
     const y = Math.max(58, Math.min(874, body.position.y - g.h / 2 - 22));

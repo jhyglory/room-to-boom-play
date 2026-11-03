@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.32.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.33.0';
 
-// v32 opens the central hall and places one wall at each room entrance; preserve earlier records and identities.
-export const STAGE = 'studio-room-entries16-v32';
+// v33 accepts 80% physical-area overlap after 500ms calm and revokes delivery on exit; preserve earlier records and identities.
+export const STAGE = 'studio-overlap80-16-v33';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

@@ -1,11 +1,11 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.32.0';
-import { GameRenderer } from './render.js?v=0.32.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.33.0';
+import { GameRenderer } from './render.js?v=0.33.0';
 import { WALL_RENDER } from './assets.js?v=0.30.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.32.1';
+import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.33.0';
 import { GameAudio } from './audio.js?v=0.30.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.32.1';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.33.0';
 import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.30.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -182,7 +182,7 @@ function updateDeliveryHint(now){
     const percent=Math.min(100,Math.round((body.game.settled||0)/5));
     $('live-hint').textContent=`${name} is inside · settling ${percent}%. Let it come to rest.`;
   }else if(state==='outside'&&remaining.length===1){
-    $('live-hint').textContent=`${name} is the last piece. Put its whole body inside the upstairs mint floor.`;
+    $('live-hint').textContent=`${name} is the last piece. Bring at least 80% inside the upstairs mint floor.`;
   }
 }
 function isRankingScreen(){return phase==='complete'||phase==='rankings';}
@@ -415,7 +415,7 @@ function goMain(){
   announce('Main menu. Your best record is saved.');$('play').focus();
 }
 function finish(){
-  if(phase!=='playing')return;
+  if(phase!=='playing'||world.moved!==TOTAL_FURNITURE)return;
   const result=clock.finish(physicsNow ?? performance.now());
   release();phase='complete';accumulator=0;impactPresentation.clear();
   resultSeconds=Number(formatSeconds(result));
@@ -456,6 +456,7 @@ function requestRestart(){
 }
 
 world.onDeliver = body => {
+  if(phase!=='playing')return;
   audio.play('deliver',world.moved);
   renderer.addBurst(body.position.x,body.position.y,'#79bda0',14);
   updateProgress();
@@ -463,6 +464,14 @@ world.onDeliver = body => {
   $('live-hint').textContent=remaining===0?'Everybody is home!':`${remaining} more ${remaining===1?'piece':'pieces'} to make it home.`;
   announce(`${itemNames[body.game.id]||body.game.id} moved. ${world.moved} of ${TOTAL_FURNITURE}.`);
   if(world.moved===TOTAL_FURNITURE)finish();
+};
+world.onUndeliver = body => {
+  if(phase!=='playing')return;
+  updateProgress();
+  hintUntil=performance.now()+1400;
+  const name=itemNames[body.game.id]||body.game.id;
+  $('live-hint').textContent=`${name} slipped out. Bring at least 80% back inside and let it settle.`;
+  announce(`${name} is no longer home. ${world.moved} of ${TOTAL_FURNITURE} moved.`);
 };
 function observeWallImpact(type,wall,info){
   if(!completionQA)return;
@@ -550,7 +559,7 @@ canvas.addEventListener('pointerup',event=>{
   }
   release();hintUntil=performance.now()+700;
   $('live-hint').textContent=launched?'Catch a rebound: tap moving furniture to stop it.':
-    wasCaught?'Stopped. Leave the whole piece inside NEW HOME to settle.':'Pull farther back, then release to launch.';
+    wasCaught?'Stopped. Leave at least 80% inside NEW HOME to settle.':'Pull farther back, then release to launch.';
   if(launched)showCoach('catch','CATCH THE REBOUND','Tap moving furniture to stop it.',5000);
 });
 canvas.addEventListener('pointercancel',event=>{if(event.pointerId===pointerId){advanceSimulation(performance.now());release();}});
@@ -668,7 +677,8 @@ if(completionQA)canvas.addEventListener('room-to-boom:inspect',event=>{
     impacts:diagnosticImpacts.map(event=>({...event,point:event.point?{...event.point}:null})),maxPull:PHYSICS.maxPull,
     bodies:world.bodies.map(body=>({id:body.game.id,position:{...body.position},velocity:{...world.M.Body.getVelocity(body)},mass:body.mass,restitution:body.restitution,angle:body.angle,angularVelocity:world.M.Body.getAngularVelocity(body),vertices:body.vertices.map(({x,y})=>({x,y})),w:body.game.w,h:body.game.h,
       maxLaunchSpeed:body.game.maxLaunchSpeed,minimumLaunchSpeed:body.game.minimumLaunchSpeed,
-      frictionAir:body.frictionAir,floorDamping:body.game.floorDamping,delivered:body.game.delivered})),
+      frictionAir:body.frictionAir,floorDamping:body.game.floorDamping,delivered:body.game.delivered,
+      deliveryOverlap:body.game.deliveryOverlap,deliveryState:body.game.deliveryState,settled:body.game.settled})),
     walls:world.walls.map(wall=>({id:wall.game.id,group:wall.game.group,position:{...wall.position},w:wall.game.w,h:wall.game.h,weak:wall.game.weak,health:wall.game.health,maxHealth:wall.game.maxHealth,colliderActive:activeBodies.has(wall),lastHitEnergy:wall.game.lastHitEnergy,lastHitDamage:wall.game.lastHitDamage,cracked:wall.game.cracked,broken:wall.game.broken,hidden:wall.game.hidden}))};
 });
 

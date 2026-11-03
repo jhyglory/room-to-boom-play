@@ -153,12 +153,64 @@ const STEP = PHYSICS.stepMs;
 const MAX_SPEED = PHYSICS.speedCap;
 const MAX_PULL = PHYSICS.maxPull;
 
+export const DELIVERY_OVERLAP_REQUIRED = .8;
+
+function polygonArea(vertices) {
+  let twiceArea = 0;
+  for (let index = 0; index < vertices.length; index++) {
+    const a = vertices[index], b = vertices[(index + 1) % vertices.length];
+    twiceArea += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(twiceArea) / 2;
+}
+
+// Clip the real rotated collision polygon, not its velocity-swept broad-phase
+// bounds or the PNG frame. Four half-plane clips preserve angled corner area.
+export function deliveryOverlapRatio(vertices, area = WORLD.delivery) {
+  if (!Array.isArray(vertices) || vertices.length < 3 || !area
+    || ![area.minX, area.maxX, area.minY, area.maxY].every(Number.isFinite)
+    || area.minX >= area.maxX || area.minY >= area.maxY) return 0;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const vertex of vertices) {
+    if (!Number.isFinite(vertex?.x) || !Number.isFinite(vertex?.y)) return 0;
+    minX = Math.min(minX, vertex.x); maxX = Math.max(maxX, vertex.x);
+    minY = Math.min(minY, vertex.y); maxY = Math.max(maxY, vertex.y);
+  }
+  const totalArea = polygonArea(vertices);
+  if (totalArea <= Number.EPSILON || maxX <= area.minX || minX >= area.maxX
+    || maxY <= area.minY || minY >= area.maxY) return 0;
+  if (minX >= area.minX && maxX <= area.maxX && minY >= area.minY && maxY <= area.maxY) return 1;
+  let clipped = vertices;
+  for (const [axis, edge, minimum] of [
+    ['x', area.minX, true], ['x', area.maxX, false],
+    ['y', area.minY, true], ['y', area.maxY, false],
+  ]) {
+    if (!clipped.length) return 0;
+    const next = [];
+    let previous = clipped.at(-1);
+    let previousInside = minimum ? previous[axis] >= edge : previous[axis] <= edge;
+    for (const current of clipped) {
+      const currentInside = minimum ? current[axis] >= edge : current[axis] <= edge;
+      if (currentInside !== previousInside) {
+        const fraction = (edge - previous[axis]) / (current[axis] - previous[axis]);
+        next.push({x: previous.x + fraction * (current.x - previous.x),
+          y: previous.y + fraction * (current.y - previous.y)});
+      }
+      if (currentInside) next.push(current);
+      previous = current; previousInside = currentInside;
+    }
+    clipped = next;
+  }
+  return Math.max(0, Math.min(1, polygonArea(clipped) / totalArea));
+}
+
 export class MovingWorld {
-  constructor({ onDeliver, onBreak, onImpact, onWallHit } = {}) {
+  constructor({ onDeliver, onUndeliver, onBreak, onImpact, onWallHit } = {}) {
     const M = globalThis.Matter;
     if (!M) throw new Error('The local physics engine could not be loaded. Reload to try again.');
     this.M = M;
     this.onDeliver = onDeliver;
+    this.onUndeliver = onUndeliver;
     this.onBreak = onBreak;
     this.onImpact = onImpact;
     this.onWallHit = onWallHit;
@@ -211,7 +263,7 @@ export class MovingWorld {
         maxLaunchSpeed: Math.min(PHYSICS.speedCap, REFERENCE_LAUNCH.launchCap / spec.heavy ** REFERENCE_LAUNCH.weightExponent),
         maxLaunchEnergy: .5 * body.mass * Math.min(PHYSICS.speedCap, REFERENCE_LAUNCH.launchCap / spec.heavy ** REFERENCE_LAUNCH.weightExponent) ** 2,
         floorDamping: GLIDE_PROFILES[spec.id].floorDamping ?? FLOOR_DAMPING[spec.material], delivered: false, settled: 0,
-        deliveryState: 'outside', deliveryProtrusion: 0, impact: 0 };
+        deliveryState: 'outside', deliveryProtrusion: 0, deliveryOverlap: 0, impact: 0 };
       return body;
     });
 
@@ -445,30 +497,42 @@ export class MovingWorld {
     for (const body of this._queuedBreaks) Composite.remove(this.engine.world, body);
     this._queuedBreaks.length = 0;
 
-    const area = WORLD.delivery;
+    const area = WORLD.delivery, newlyDelivered = [], newlyUndelivered = [];
     for (const body of this.bodies) {
-      if (body.game.delivered) { body.game.deliveryState = 'moved'; continue; }
       // Matter's broad-phase bounds include a velocity sweep. Judge the real
-      // rotated furniture outline against the exact visible room interior.
+      // rotated furniture polygon against the visible destination interior.
       let protrusion = 0;
       for (const vertex of body.vertices) {
         protrusion = Math.max(protrusion, area.minX - vertex.x, vertex.x - area.maxX,
           area.minY - vertex.y, vertex.y - area.maxY);
       }
-      const inside = protrusion <= PHYSICS.deliveryContactEpsilon;
+      const overlap = deliveryOverlapRatio(body.vertices, area);
+      const inside = overlap + 1e-10 >= DELIVERY_OVERLAP_REQUIRED;
       const aiming = body === this.grabbed;
       const calm = !aiming && Vector.magnitude(body.velocity) < .75 && Math.abs(body.angularVelocity) < .035;
       body.game.deliveryProtrusion = protrusion;
+      body.game.deliveryOverlap = overlap;
+      if (body.game.delivered) {
+        if (inside) { body.game.deliveryState = 'moved'; continue; }
+        body.game.delivered = false;
+        body.game.settled = 0;
+        newlyUndelivered.push(body);
+      }
       body.game.deliveryState = aiming ? 'aiming' : inside ? 'settling' : 'outside';
       body.game.settled = inside && calm ? body.game.settled + dt : 0;
       if (body.game.settled + .0001 >= 500) {
         body.game.delivered = true;
         body.game.deliveryState = 'moved';
         body.game.settled = 500;
-        this._moved += 1;
-        this.onDeliver?.(body);
+        newlyDelivered.push(body);
       }
     }
+    // Reconcile the complete board before any UI callback can observe a count
+    // or finish the run. A departure and arrival in the same substep must not
+    // briefly claim16 delivered pieces while one has already left the home.
+    this._moved = this.bodies.reduce((count, body) => count + Number(body.game.delivered), 0);
+    for (const body of newlyUndelivered) this.onUndeliver?.(body);
+    for (const body of newlyDelivered) this.onDeliver?.(body);
   }
 
   _breakthroughActive(body) {
