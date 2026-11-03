@@ -987,6 +987,7 @@ img.result-avatar { object-fit: contain; }
 
 /* One shared board, with old rule competitions available without mixing times. */
 .result-ranking-tools { display: flex; align-items: center; gap: 8px; padding: 0 5px 5px; flex: none; }
+.ranking-rules-note { flex: none; margin: 0 6px 7px; color: #f4dfbd; font-size: 10px; line-height: 1.35; }
 .result-ranking-tools label { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; color: #f7e8cf; font-size: 11px; font-weight: 900; }
 .result-ranking-tools select { flex: 1; min-width: 0; min-height: 44px; padding: 5px 24px 5px 9px; border: 1px solid #e5cb9b; border-radius: 9px; background: #fff4db; color: #223c50; font: 800 12px Nunito, sans-serif; }
 #result-refresh { min-height: 44px; padding: 5px 10px; border: 1px solid #e5b351; border-radius: 9px; background: #ffce56; color: #223c50; font: 1000 11px Nunito, sans-serif; }
@@ -1004,6 +1005,6 @@ img.result-avatar { object-fit: contain; }
   #result-refresh { padding-inline: 7px; font-size: 10px; }
 }
 
-.result-ranking { grid-template-rows: auto auto minmax(0, 1fr); }
+.result-ranking { grid-template-rows: auto auto auto minmax(0, 1fr); }
 .result-panel:has(#result-nickname-form:not([hidden])) .result-ranking,
-.result-panel:has(#manual-share:not([hidden])) .result-ranking { grid-template-rows: auto auto auto; }
+.result-panel:has(#manual-share:not([hidden])) .result-ranking { grid-template-rows: auto auto auto auto; }

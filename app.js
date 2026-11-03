@@ -2,10 +2,10 @@ import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engin
 import { GameRenderer } from './render.js?v=0.32.0';
 import { WALL_RENDER } from './assets.js?v=0.30.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.32.0';
+import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.32.1';
 import { GameAudio } from './audio.js?v=0.30.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.32.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.32.1';
 import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.30.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -76,6 +76,7 @@ let rankingStage = STAGE;
 let rankingRequest = 0;
 let rankingInFlight = null;
 let pendingSubmission = false;
+let pendingRecovery = null;
 const diagnosticImpacts=[];
 const itemNames = Object.fromEntries(FURNITURE.map(item=>[item.id,item.name]));
 const STEP = PHYSICS.stepMs;
@@ -187,6 +188,7 @@ function updateDeliveryHint(now){
 function isRankingScreen(){return phase==='complete'||phase==='rankings';}
 function showPhase(){
   document.body.setAttribute('data-phase',phase);
+  paintPendingRecords();
   updateCoach(performance.now());
   syncSettingsLayout();
   if(phase!=='playing'&&!window.matchMedia('(min-width: 740px)').matches)$('game-settings').open=false;
@@ -258,6 +260,13 @@ function paintNickname(){
   $('result-nickname').disabled=nicknameSaving;
 }
 function rankingLabel(stage=rankingStage){return RANKING_RULESETS.find(rules=>rules.stage===stage)?.label||'Current';}
+function pendingRecords(){return leaderboard.restorePending();}
+function paintPendingRecords(){
+  const count=pendingRecords().length;
+  $('record-sync-status').hidden=count===0;
+  $('record-sync-status').textContent=count?`${count} finished ${count===1?'run is':'runs are'} waiting to sync. Reconnect to upload.`:'';
+  return count;
+}
 function paintRankingControls(){
   $('result-rules').value=rankingStage;
   $('result-rules').disabled=nicknameSaving;
@@ -275,6 +284,7 @@ function paintLeaderboard(board){
   $('result-board').innerHTML=renderLeaderboardHTML(board);
   $('result-board').setAttribute('data-count',String(board.top.length));
   const shared=board.scope==='server';
+  const waiting=paintPendingRecords();
   $('rankings-title').textContent=shared?'RANKINGS':'PERSONAL RECORD';
   $('result-ranking-title').textContent=`${shared?'Rankings':'My record'} · ${rankingLabel(board.stage)}`;
   $('result-scope').textContent=shared?'PC + MOBILE':'On this device';
@@ -285,7 +295,8 @@ function paintLeaderboard(board){
   $('result-my-rank').textContent=shared?(board.me?`${rankLabel(board.me)} / ${board.total}`:'No rank yet')
     :(board.me?'Local record':'No saved record');
   $('result-my-time').textContent=board.me?`${board.me.seconds.toFixed(2)}s`:'—';
-  const notice=shared?(board.submissionPending?'This run is saved on this device. Upload not confirmed; REFRESH retries.':board.identityWarning?'Shared rankings loaded. Your profile could not be confirmed; try REFRESH.':'')
+  $('ranking-rules-note').textContent=board.stage===STAGE?'One leaderboard for PC + mobile using these rules.':'Previous layout. These times stay separate from the current rules.';
+  const notice=waiting?`${!shared&&board.syncError?'Offline. ':''}${waiting} finished ${waiting===1?'run is':'runs are'} waiting to sync. Reconnect or REFRESH to retry.`:shared?(board.submissionPending?'Upload not confirmed. REFRESH retries.':board.identityWarning?'Shared rankings loaded. Your profile could not be confirmed; try REFRESH.':'')
     :board.syncError?'Offline. Showing your saved record on this device.':'Records are saved in this browser only. A shared leaderboard is not connected.';
   $('result-sync-state').textContent=notice;
   $('result-load-state').textContent=notice;
@@ -345,6 +356,23 @@ async function syncLeaderboard(){
   if(phase!=='complete'||resultSeconds===null)return;
   pendingSubmission=true;
   return refreshRankings({submitPending:true});
+}
+function recoverPendingRankings({refresh=false}={}){
+  if(!leaderboard.serverEnabled||document.hidden||nicknameSaving)return Promise.resolve();
+  if(pendingRecovery)return pendingRecovery;
+  const queued=paintPendingRecords();
+  if(!queued)return refresh&&isRankingScreen()?refreshRankings():Promise.resolve();
+  const task=(async()=>{
+    await leaderboard.flushPending({force:true});
+    if(resultSubmissionId)pendingSubmission=pendingRecords().some(record=>record.submissionId===resultSubmissionId);
+    paintPendingRecords();
+    // Recovery owns only saved receipts. It never resumes the game or changes
+    // the held pointer, physics clock, this run or a later run's result state.
+    if(isRankingScreen()&&!nicknameSaving)await refreshRankings();
+  })();
+  pendingRecovery=task;
+  void task.catch(()=>{paintPendingRecords();}).finally(()=>{if(pendingRecovery===task)pendingRecovery=null;});
+  return task;
 }
 function editNickname(){
   if(!isRankingScreen()||nicknameSaving||leaderboardSyncing)return;
@@ -584,9 +612,10 @@ function quietWhenInactive(){
 }
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)quietWhenInactive();
-  else if(isRankingScreen())void refreshRankings();
+  else void recoverPendingRankings({refresh:true});
 });
-window.addEventListener('pageshow',()=>{if(isRankingScreen()&&!document.hidden)void refreshRankings();});
+window.addEventListener('pageshow',()=>{void recoverPendingRankings({refresh:true});});
+window.addEventListener('online',()=>{void recoverPendingRankings({refresh:true});});
 window.addEventListener('blur',quietWhenInactive);
 window.addEventListener('keydown',event=>{
   if($('restart-dialog').open)return;
@@ -619,13 +648,14 @@ $('result-rules').addEventListener('change',()=>{
   paintLeaderboard(leaderboard.localBoard(resultSeconds,{stage:selected}));
   void refreshRankings();
 });
-$('result-refresh').addEventListener('click',()=>{void refreshRankings();});
+$('result-refresh').addEventListener('click',()=>{void recoverPendingRankings({refresh:true});});
 paintRankingControls();
 if(LEADERBOARD_MODE==='device')$('view-rankings').textContent='MY RECORD';
 updateBest();updateSound();updateTimer(performance.now());
 $('challenge-badge').hidden=!challenge;
 if(challenge)$('challenge-time').textContent=`BEAT ${challenge.seconds.toFixed(2)}s`;
 showPhase();updateProgress();renderer.resize();
+void recoverPendingRankings();
 
 // A local development harness may inspect copied metadata and dispatch normal
 // DOM pointer inputs. It cannot change the world or call simulation methods.

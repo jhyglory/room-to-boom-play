@@ -1,4 +1,4 @@
-import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.32.0';
+import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.32.1';
 
 export const RANKING_RULESETS = Object.freeze([
   {stage:STAGE,label:'v0.32',current:true},
@@ -25,7 +25,7 @@ function remoteBase(value) {
 }
 function validToken(value){return typeof value==='string'&&/^[A-Za-z0-9._~-]{1,512}$/.test(value);}
 export function cleanNickname(value) {
-  const text = String(value ?? '').normalize('NFC').replace(/[\x00-\x1f\x7f]/g, '').replace(/\s+/g, ' ').trim();
+  const text = String(value ?? '').normalize('NFC').replace(/\p{C}/gu, '').replace(/\s+/g, ' ').trim();
   return Array.from(text).slice(0, 16).join('') || 'Player';
 }
 export function escapeHTML(value) {
@@ -85,10 +85,17 @@ export class LeaderboardClient {
     this.playerKey=authPrefix?`${authPrefix}player-id`:PLAYER_KEY;
     this.tokenKey=authPrefix?`${authPrefix}token`:null;
     this.pendingNameKey=authPrefix?`${authPrefix}pending-nickname`:null;
-    this.pendingRemoteNickname=this.pendingNameKey?this.read(this.pendingNameKey)||null:null;
+    const pendingName=this.pendingNameKey?this.read(this.pendingNameKey):null;
+    this.pendingRemoteNickname=pendingName?cleanNickname(pendingName):null;
+    if(pendingName&&this.pendingRemoteNickname!==pendingName)this.write(this.pendingNameKey,this.pendingRemoteNickname);
     const savedToken=this.tokenKey?this.read(this.tokenKey):null;
     this.token=validToken(savedToken)?savedToken:null;
-    this.playerId=this.read(this.playerKey)||makeSubmissionId();this.write(this.playerKey,this.playerId);
+    this.invalidStoredCredential=!!savedToken&&!validToken(savedToken);
+    const savedPlayer=this.read(this.playerKey);
+    this.playerId=savedPlayer||makeSubmissionId();this.write(this.playerKey,this.playerId);
+    this.confirmedPlayerId=this.token&&savedPlayer?savedPlayer:null;
+    this.outboxPrefix=`${authPrefix||'room-to-boom:cookie:'}finish:`;
+    this.outboxEntries=new Map();this.volatileEntries=new Set();this.flushPromise=null;this.retryAfter=new Map();this.queuedNicknameEdits=0;
     const savedName=this.read(NAME_KEY);
     this.nickname=cleanNickname(savedName);
     this.hasNickname=this.read('room-to-boom:nickname-set')==='true'||!!savedName&&!['Player','플레이어'].includes(this.nickname);
@@ -107,7 +114,7 @@ export class LeaderboardClient {
       }
       if(!this.token)throw new Error('Missing profile credential');
     }
-    this.playerId=profile.playerId;this.write(this.playerKey,this.playerId);
+    this.playerId=profile.playerId;this.confirmedPlayerId=profile.playerId;this.write(this.playerKey,this.playerId);
     this.nickname=cleanNickname(profile.nickname);this.write(NAME_KEY,this.nickname);
     if(!['Player','플레이어'].includes(this.nickname)){this.hasNickname=true;this.write('room-to-boom:nickname-set','true');}
     // The bearer credential belongs only to this API origin's private storage.
@@ -125,29 +132,32 @@ export class LeaderboardClient {
   reloadRemoteIdentity(){
     if(!this.apiBase)return;
     const token=this.read(this.tokenKey);
+    this.invalidStoredCredential=!!token&&!validToken(token);
     if(validToken(token)&&token!==this.token){
       this.token=token;this.profile=null;
-      this.playerId=this.read(this.playerKey)||this.playerId;
+      this.playerId=this.read(this.playerKey)||this.playerId;this.confirmedPlayerId=this.read(this.playerKey)||null;
     }
   }
-  async ensureProfile(){
+  async ensureProfile({skipNameSync=false}={}){
     this.reloadRemoteIdentity();
-    if(this.profile&&!this.pendingRemoteNickname)return this.profile;
+    if(this.apiBase&&(this.invalidStoredCredential||!this.token&&this.restorePending().some(entry=>entry.playerId)))
+      throw new Error('The saved player credential must be restored before pending finishes can authenticate');
+    if(this.profile&&(skipNameSync||!this.pendingRemoteNickname))return this.profile;
     if(!this.profilePromise){
       const establish=async()=>{
         // Another tab may have established this browser's identity while this
         // tab was waiting. Reload inside the origin-wide lock before any GET.
         this.reloadRemoteIdentity();
-        if(this.profile&&!this.pendingRemoteNickname)return this.profile;
+        if(this.profile&&(skipNameSync||!this.pendingRemoteNickname))return this.profile;
         const preferredName=this.hasNickname?this.nickname:null;
         const incoming=await this.request('./api/profile');
         // Reusing an explicit nickname for a newly issued anonymous identity
         // does not import any local time or turn a rename into a completion.
-        if(this.apiBase&&incoming.token!==undefined&&preferredName&&preferredName!==cleanNickname(incoming.nickname)){
+        if(this.apiBase&&incoming.token!==undefined&&preferredName&&!this.pendingRemoteNickname&&preferredName!==cleanNickname(incoming.nickname)){
           this.pendingRemoteNickname=preferredName;this.write(this.pendingNameKey,preferredName);
         }
         this.adoptProfile(incoming);
-        if(this.apiBase&&this.pendingRemoteNickname){
+        if(this.apiBase&&this.pendingRemoteNickname&&!skipNameSync){
           try{
             this.adoptProfile(await this.request('./api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:this.pendingRemoteNickname})}));
             this.pendingRemoteNickname=null;this.write(this.pendingNameKey,'');
@@ -203,13 +213,140 @@ export class LeaderboardClient {
     const board=validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`,{}, {anonymous:true}),stage);
     return {...board,identityWarning:true,...extra};
   }
+  // Pending entries are individual origin-scoped keys. Two tabs appending
+  // different real finishes cannot overwrite a shared JSON-array catalog.
+  outboxKey(submissionId){return this.outboxPrefix+encodeURIComponent(submissionId);}
+  parsePending(raw){
+    try{
+      const entry=JSON.parse(raw);
+      if(!entry||entry.schema!==1||!RANKING_RULESETS.some(r=>r.stage===entry.stage)||
+        typeof entry.submissionId!=='string'||!/^[A-Za-z0-9_.:-]{8,128}$/.test(entry.submissionId)||
+        normalizeSeconds(entry.seconds)!==entry.seconds||typeof entry.nickname!=='string'||cleanNickname(entry.nickname)!==entry.nickname||
+        entry.playerId!==null&&(typeof entry.playerId!=='string'||!entry.playerId)||!Number.isFinite(entry.createdAt))return null;
+      return entry;
+    }catch{return null;}
+  }
+  persistPending(entry){
+    const copy={...entry};this.outboxEntries.set(entry.submissionId,copy);
+    const persisted=this.write(this.outboxKey(entry.submissionId),JSON.stringify(copy));
+    if(persisted)this.volatileEntries.delete(entry.submissionId);else this.volatileEntries.add(entry.submissionId);
+    return persisted;
+  }
+  removePending(submissionId){
+    const key=this.outboxKey(submissionId);
+    try{if(typeof this.storage?.removeItem==='function')this.storage.removeItem(key);else this.storage?.setItem(key,'');}catch{}
+    this.outboxEntries.delete(submissionId);this.volatileEntries.delete(submissionId);this.retryAfter.delete(submissionId);
+  }
+  restorePending({stage}={}){
+    if(stage!==undefined)rankingStage(stage);
+    if(!this.serverEnabled)return [];
+    try{
+      for(let index=0;index<this.storage.length;index++){
+        const key=this.storage.key(index);if(typeof key!=='string'||!key.startsWith(this.outboxPrefix))continue;
+        const entry=this.parsePending(this.read(key));
+        if(entry&&key===this.outboxKey(entry.submissionId))this.outboxEntries.set(entry.submissionId,entry);
+      }
+    }catch{/* A blocked store still permits this session's volatile entries. */}
+    for(const [id]of this.outboxEntries){
+      const stored=this.parsePending(this.read(this.outboxKey(id)));
+      if(stored)this.outboxEntries.set(id,stored);
+      else if(!this.volatileEntries.has(id))this.outboxEntries.delete(id);
+    }
+    return [...this.outboxEntries.values()].filter(entry=>stage===undefined||entry.stage===stage)
+      .sort((a,b)=>a.createdAt-b.createdAt||a.submissionId.localeCompare(b.submissionId))
+      .map(({schema,...entry})=>({...entry}));
+  }
+  get pendingCount(){return this.restorePending().length;}
+  async sendPending(entry){
+    const send=async()=>{
+      const latest=this.restorePending().find(value=>value.submissionId===entry.submissionId);
+      if(!latest)return null; // Another tab already received the same acknowledgement.
+      entry={schema:1,...latest};
+      const startName=this.hasNickname?cleanNickname(this.pendingRemoteNickname||this.read(NAME_KEY)||this.nickname):null;
+      const laterName=startName&&startName!==entry.nickname&&startName!==entry.nameAtCreation?startName:null;
+      try{
+        // A cosmetic preferred-name retry must never block an actual finish.
+        // The immutable record payload itself can establish its saved name.
+        await this.ensureProfile({skipNameSync:true});
+        // Reload after the asynchronous handshake: another tab may have bound
+        // this receipt while it was waiting for the shared identity lock.
+        const current=this.restorePending().find(value=>value.submissionId===entry.submissionId);
+        if(!current)return null;
+        entry={schema:1,...current};
+        if(entry.playerId&&entry.playerId!==this.playerId)throw new Error('Pending finish belongs to another authenticated player');
+        if(!entry.playerId){entry={...entry,playerId:this.playerId};this.persistPending(entry);}
+        const data=await this.request('./api/records',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({stage:entry.stage,seconds:entry.seconds,nickname:entry.nickname,submissionId:entry.submissionId})});
+        let board=validateBoard(data,entry.stage);
+        if(!board.persisted||(board.playerId||board.me?.playerId)!==entry.playerId)throw new Error('Completion acknowledgement has no matching authenticated owner');
+        const desired=this.pendingRemoteNickname||laterName;
+        if(this.pendingRemoteNickname&&(board.nickname??board.me?.nickname)===this.pendingRemoteNickname){
+          this.pendingRemoteNickname=null;if(this.pendingNameKey)this.write(this.pendingNameKey,'');
+        }
+        const acknowledgement={isNewBest:board.isNewBest,replayed:board.replayed};
+        this.removePending(entry.submissionId);
+        // A new receipt may commit after a later rename. Keep the receipt's
+        // immutable name for idempotency, then restore the explicit new name.
+        if(!this.queuedNicknameEdits&&desired&&desired!==entry.nickname&&desired!==entry.nameAtCreation){
+          this.pendingRemoteNickname=desired;if(this.pendingNameKey)this.write(this.pendingNameKey,desired);
+          try{
+            this.adoptProfile(await this.request('./api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:desired})}));
+            this.pendingRemoteNickname=null;if(this.pendingNameKey)this.write(this.pendingNameKey,'');
+            board={...validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(entry.stage)}`),entry.stage),...acknowledgement};
+          }catch{board={...board,nicknamePending:true};}
+        }
+        return this.adoptBoard(board);
+      }catch{
+        this.profile=null;this.retryAfter.set(entry.submissionId,Date.now()+1000);
+        const extra={syncError:true,submissionPending:true,pendingDurable:!this.volatileEntries.has(entry.submissionId)};
+        if(this.apiBase){try{return await this.publicBoard(entry.stage,extra);}catch{}}
+        return {...this.localBoard(entry.stage===STAGE?entry.seconds:null,{stage:entry.stage}),...extra};
+      }
+    };
+    // Profile establishment keeps its origin-wide Web Lock. Concurrent tabs
+    // may replay this immutable receipt safely through server idempotency.
+    return send();
+  }
+  async flushEntries({stage,limit=16,force=false}={}){
+    const maximum=Math.max(1,Math.min(16,Math.trunc(limit)||16)),boards=[];
+    let submittedCount=0,failedCount=0;
+    for(const entry of this.restorePending({stage}).slice(0,maximum)){
+      if(!force&&(this.retryAfter.get(entry.submissionId)||0)>Date.now())continue;
+      const board=await this.sendPending(entry);
+      if(!board)continue;
+      if(board.syncError){failedCount++;break;} // One failed network round is enough for this trigger.
+      submittedCount++;boards.push(board);
+    }
+    return {pendingCount:this.pendingCount,submittedCount,failedCount,boards};
+  }
+  flushPending(options={}){
+    if(options.stage!==undefined)rankingStage(options.stage);
+    if(this.flushPromise)return this.flushPromise;
+    const promise=this.enqueue(()=>this.flushEntries(options));
+    this.flushPromise=promise;
+    void promise.finally(()=>{if(this.flushPromise===promise)this.flushPromise=null;}).catch(()=>{});
+    return promise;
+  }
   submit(seconds,{submissionId=makeSubmissionId(),nickname}={}) {
     const value=normalizeSeconds(seconds);
     if(value===null)return Promise.reject(new RangeError('Invalid completion time'));
+    if(typeof submissionId!=='string'||!/^[A-Za-z0-9_.:-]{8,128}$/.test(submissionId))return Promise.reject(new RangeError('Invalid submission ID'));
     const previous=this.submissions.get(submissionId);
     if(previous){
       if(previous.seconds!==value)return Promise.reject(new Error('Submission already used'));
       return previous.promise;
+    }
+    let entry;
+    if(this.serverEnabled){
+      const existing=this.restorePending().find(item=>item.submissionId===submissionId);
+      if(existing&&(existing.seconds!==value||existing.stage!==STAGE))return Promise.reject(new Error('Submission already used'));
+      // This synchronous write precedes profile establishment, fetch and the
+      // first await, so Retry or reload cannot erase a completed event.
+      entry=existing?{schema:1,...existing}:{schema:1,submissionId,stage:STAGE,seconds:value,
+        nickname:cleanNickname(nickname??this.pendingRemoteNickname??this.nickname),
+        nameAtCreation:cleanNickname(this.pendingRemoteNickname??this.nickname),
+        playerId:this.confirmedPlayerId,createdAt:Date.now()};
+      this.persistPending(entry);
     }
     const promise=this.enqueue(async()=>{
       if(!this.serverEnabled){
@@ -219,50 +356,58 @@ export class LeaderboardClient {
         this.deviceBest=previous===null?value:Math.min(previous,value);
         return {...this.localBoard(value),isNewBest:previous===null||value<previous};
       }
-      try {
-        // Establish the authenticated identity before a completion can commit.
-        // A timed-out identity GET may create an empty profile, never a record.
-        await this.ensureProfile();
-        const name=cleanNickname(nickname??this.nickname);
-        const data=await this.request('./api/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stage:STAGE,seconds:value,nickname:name,submissionId})});
-        return this.adoptBoard(validateBoard(data));
-      } catch {
-        this.profile=null;
-        if(this.apiBase){try{return await this.publicBoard(STAGE,{syncError:true,submissionPending:true});}catch{}}
-        return {...this.localBoard(value),syncError:true,submissionPending:true};
-      }
+      return await this.sendPending(entry)||this.refreshBoard(value,STAGE);
     });
     this.submissions.set(submissionId,{seconds:value,promise});
-    // A failed connection may have committed on the server. Retry with the
-    // same receipt ID and established identity, never invent a second finish.
     void promise.then(board=>{if(board.syncError&&this.submissions.get(submissionId)?.promise===promise)this.submissions.delete(submissionId);});
     if(this.submissions.size>64)this.submissions.delete(this.submissions.keys().next().value);
     return promise;
   }
+
   updateNickname(value,{seconds=null,localOnly=false,stage=STAGE}={}) {
     rankingStage(stage);
     const name=cleanNickname(value);
-    return this.enqueue(async()=>{
-      if(localOnly||!this.serverEnabled){this.setNickname(name);return {...this.localBoard(seconds,{stage}),profileSaved:'browser'};}
-      await this.ensureProfile();
-      const profile=await this.request('./api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:name})});
-      const saved=this.adoptProfile(profile);this.setNickname(saved.nickname);
-      const board=this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage));
-      return {...board,profileSaved:'server'};
+    this.queuedNicknameEdits++;
+    // An explicit valid edit supersedes a failed legacy preferred-name sync.
+    // Establish identity without first retrying that obsolete name.
+    if(!localOnly&&this.serverEnabled){this.pendingRemoteNickname=name;if(this.pendingNameKey)this.write(this.pendingNameKey,name);}
+    const pending=this.enqueue(async()=>{
+      try{
+        if(localOnly||!this.serverEnabled){this.setNickname(name);return {...this.localBoard(seconds,{stage}),profileSaved:'browser'};}
+        await this.ensureProfile({skipNameSync:true});
+        const profile=await this.request('./api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:name})});
+        const saved=this.adoptProfile(profile);this.setNickname(saved.nickname);
+        if(this.pendingRemoteNickname===name){this.pendingRemoteNickname=null;if(this.pendingNameKey)this.write(this.pendingNameKey,'');}
+        const board=this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage));
+        return {...board,profileSaved:'server'};
+      }catch(error){
+        // An unsuccessful edit is not a saved name. Cancel/Retry must not
+        // silently publish it later or keep blocking the next real finish.
+        if(this.pendingRemoteNickname===name){this.pendingRemoteNickname=null;if(this.pendingNameKey)this.write(this.pendingNameKey,'');}
+        throw error;
+      }finally{this.queuedNicknameEdits--;}
     });
+    return pending;
   }
-  refresh(seconds,{stage=STAGE}={}) {
+  async refreshBoard(seconds,stage){
+    if(!this.serverEnabled)return this.localBoard(seconds,{stage});
+    try {await this.ensureProfile();return this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage));}
+    catch {
+      this.profile=null;
+      if(this.apiBase){try{return await this.publicBoard(stage);}catch{}}
+      return {...this.localBoard(seconds,{stage}),syncError:true};
+    }
+  }
+  refresh(seconds,{stage=STAGE,force=false}={}) {
     rankingStage(stage);
     return this.enqueue(async()=>{
       if(!this.serverEnabled)return this.localBoard(seconds,{stage});
-      try {await this.ensureProfile();return this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage));}
-      catch {
-        this.profile=null;
-        if(this.apiBase){try{return await this.publicBoard(stage);}catch{}}
-        return {...this.localBoard(seconds,{stage}),syncError:true};
-      }
+      await this.flushEntries({stage,force});
+      const board=await this.refreshBoard(seconds,stage),pendingCount=this.pendingCount;
+      return pendingCount?{...board,submissionPending:true,pendingCount}:board;
     });
   }
+
 }
 
 function timeHTML(seconds){return `${seconds.toFixed(2)}<small>s</small>`;}

@@ -116,6 +116,7 @@ canvas.dragging { cursor: grabbing; }
 .overlay { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; padding: 14px; background: #FAF4E7A8; backdrop-filter: blur(2px); overflow-y: auto; overscroll-behavior: contain; }
 .overlay.hidden { display: none; }
 #start-overlay { align-items: end; background: linear-gradient(transparent 25%, #FAF4E72B 55%, #FAF4E7D9); backdrop-filter: none; }
+.start-card .record-sync-status { margin: 9px 0 0; color: #805b2d; font-size: 11px; line-height: 1.3; }
 .start-card, .modal-card { width: 100%; max-width: 330px; padding: 18px; text-align: center; border: 1px solid var(--rtb-border); border-radius: var(--rtb-radius-card); background: var(--rtb-surface); box-shadow: 0 5px 0 #DECDB080, 0 12px 24px #49362E1A; }
 .start-card { padding: 14px 16px; }
 .card-eyebrow { display: inline-block; color: var(--rtb-text-muted); font-size: 10px; line-height: 14px; font-weight: 800; letter-spacing: 1px; }
