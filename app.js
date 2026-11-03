@@ -2,10 +2,10 @@ import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engin
 import { GameRenderer } from './render.js?v=0.34.0';
 import { WALL_RENDER } from './assets.js?v=0.30.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.34.0';
+import { saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.34.0';
 import { GameAudio } from './audio.js?v=0.30.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.34.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, ALL_STAGE, readAllTimeBest, cacheAllTimeBest } from './leaderboard.js?v=0.35.0';
 import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.30.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -50,7 +50,7 @@ let reducedMotion = readSetting('room-to-boom:motion') === 'true' || (readSettin
 let muted = readSetting('room-to-boom:muted') === 'true';
 const audio = new GameAudio({muted,onStateChange:updateSound});
 const leaderboard = new LeaderboardClient({storage:storage(),fetch:window.fetch?.bind(window),serverEnabled:LEADERBOARD_MODE!=='device',apiBase:LEADERBOARD_API_BASE,timeoutMs:LEADERBOARD_API_BASE?8000:2500});
-let best = readBest(storage());
+let best = readAllTimeBest(storage());
 const pageUrl = window.location?.href || 'https://room-to-boom.tart-gecko-8925.chatgpt.site/';
 const challenge = parseChallenge(pageUrl);
 let resultSeconds = null;
@@ -72,7 +72,6 @@ let resultWasNewBest = false;
 let nicknameEditing = false;
 let nicknameSaving = false;
 let leaderboardSyncing = false;
-let rankingStage = STAGE;
 let rankingRequest = 0;
 let rankingInFlight = null;
 let pendingSubmission = false;
@@ -146,7 +145,7 @@ function activateSound(cue='enable',{resume=false}={}){
 }
 
 function clearResult(){
-  runVersion++;rankingRequest++;rankingInFlight=null;rankingStage=STAGE;pendingSubmission=false;resultSeconds=null;
+  runVersion++;rankingRequest++;rankingInFlight=null;pendingSubmission=false;resultSeconds=null;
   resultBoard=null;resultSubmissionId=null;
   resultWasNewBest=false;
   nicknameEditing=false;nicknameSaving=false;leaderboardSyncing=false;
@@ -259,7 +258,6 @@ function paintNickname(){
   $('result-name-cancel').hidden=false;
   $('result-nickname').disabled=nicknameSaving;
 }
-function rankingLabel(stage=rankingStage){return RANKING_RULESETS.find(rules=>rules.stage===stage)?.label||'Current';}
 function pendingRecords(){return leaderboard.restorePending();}
 function paintPendingRecords(){
   const count=pendingRecords().length;
@@ -268,8 +266,6 @@ function paintPendingRecords(){
   return count;
 }
 function paintRankingControls(){
-  $('result-rules').value=rankingStage;
-  $('result-rules').disabled=nicknameSaving;
   $('result-refresh').disabled=leaderboardSyncing||nicknameSaving;
   $('result-refresh').setAttribute('aria-busy',String(leaderboardSyncing));
   $('result-refresh').textContent=leaderboardSyncing?'LOADING…':'REFRESH';
@@ -278,24 +274,24 @@ function paintLeaderboard(board){
   resultBoard=board;
   // A server refresh or a profile rename can reveal a faster saved best too.
   // It updates the auxiliary record, never this run or the ranking entries.
-  if(board.stage===STAGE && board.me && (best===null||board.me.seconds<best)){
-    best=board.me.seconds;saveBest(storage(),best);updateBest();
+  if(board.stage===ALL_STAGE && board.me && (best===null||board.me.seconds<best)){
+    best=board.me.seconds;cacheAllTimeBest(storage(),best);updateBest();
   }
   $('result-board').innerHTML=renderLeaderboardHTML(board);
   $('result-board').setAttribute('data-count',String(board.top.length));
   const shared=board.scope==='server';
   const waiting=paintPendingRecords();
   $('rankings-title').textContent=shared?'RANKINGS':'PERSONAL RECORD';
-  $('result-ranking-title').textContent=`${shared?'Rankings':'My record'} · ${rankingLabel(board.stage)}`;
+  $('result-ranking-title').textContent=shared?'Rankings':'My record';
   $('result-scope').textContent=shared?'PC + MOBILE':'On this device';
-  $('result-my-rank-label').textContent=`My rank · ${rankingLabel(board.stage)}`;
-  $('result-ranked-best-label').textContent=`Best · ${rankingLabel(board.stage)}`;
+  $('result-my-rank-label').textContent='My rank';
+  $('result-ranked-best-label').textContent='Ranked best';
   $('result-total').textContent=shared?`${board.total} ${board.total===1?'player':'players'}`
     :`${board.total} saved ${board.total===1?'record':'records'}`;
   $('result-my-rank').textContent=shared?(board.me?`${rankLabel(board.me)} / ${board.total}`:'No rank yet')
     :(board.me?'Local record':'No saved record');
   $('result-my-time').textContent=board.me?`${board.me.seconds.toFixed(2)}s`:'—';
-  $('ranking-rules-note').textContent=board.stage===STAGE?'One leaderboard for PC + mobile using these rules.':'Previous layout. These times stay separate from the current rules.';
+  $('ranking-scope-note').textContent=shared?'All-time · One best per player':'Best across this browser’s saved runs';
   const notice=waiting?`${!shared&&board.syncError?'Offline. ':''}${waiting} finished ${waiting===1?'run is':'runs are'} waiting to sync. Reconnect or REFRESH to retry.`:shared?(board.submissionPending?'Upload not confirmed. REFRESH retries.':board.identityWarning?'Shared rankings loaded. Your profile could not be confirmed; try REFRESH.':'')
     :board.syncError?'Offline. Showing your saved record on this device.':'Records are saved in this browser only. A shared leaderboard is not connected.';
   $('result-sync-state').textContent=notice;
@@ -319,12 +315,12 @@ function paintCompletionRecord(){
   $('result-current-time').classList.toggle('very-long-time',completed&&resultSeconds>=10000);
   $('result-personal-best-time').textContent=best===null?'—':`${best.toFixed(2)}s`;
   $('result-personal-best').hidden=!completed||isNewBest||best===null;
-  setNewBestBadge(isNewBest&&(!leaderboard.serverEnabled||!leaderboardSyncing));
+  setNewBestBadge(isNewBest&&(!leaderboard.serverEnabled||!leaderboardSyncing&&!pendingSubmission));
 }
 async function refreshRankings({submitPending=false}={}){
   if(!isRankingScreen()||nicknameSaving)return;
-  const version=runVersion,stage=rankingStage;
-  if(rankingInFlight?.version===version&&rankingInFlight.stage===stage)return rankingInFlight.promise;
+  const version=runVersion;
+  if(rankingInFlight?.version===version)return rankingInFlight.promise;
   const request=++rankingRequest;
   leaderboardSyncing=true;paintNickname();paintRankingControls();paintCompletionRecord();
   $('result-load-state').textContent='Loading rankings…';
@@ -337,14 +333,15 @@ async function refreshRankings({submitPending=false}={}){
       if(submitted.scope==='server'&&!pendingSubmission)
         resultWasNewBest=resultWasNewBest&&submitted.isNewBest===true&&submitted.me?.seconds===resultSeconds;
     }
-    const board=submitted&&stage===STAGE?submitted:await leaderboard.refresh(resultSeconds,{stage});
-    // A rules change, retry, Main menu or newer refresh owns the UI now.
-    if(version!==runVersion||request!==rankingRequest||stage!==rankingStage||!isRankingScreen())return;
+    // Receipts retain their actual game rules. The visible board always reads
+    // each player's best across every production version after acknowledgement.
+    const board=await leaderboard.refresh(resultSeconds,{stage:ALL_STAGE});
+    if(version!==runVersion||request!==rankingRequest||!isRankingScreen())return;
     leaderboardSyncing=false;
     paintLeaderboard(pendingSubmission&&board.scope==='server'?{...board,submissionPending:true}:board);
     announce('Rankings loaded.');
   })();
-  rankingInFlight={version,stage,promise:task};
+  rankingInFlight={version,promise:task};
   try{return await task;}
   finally{
     if(version===runVersion&&request===rankingRequest){
@@ -363,7 +360,12 @@ function recoverPendingRankings({refresh=false}={}){
   const queued=paintPendingRecords();
   if(!queued)return refresh&&isRankingScreen()?refreshRankings():Promise.resolve();
   const task=(async()=>{
-    await leaderboard.flushPending({force:true});
+    const recovered=await leaderboard.flushPending({force:true});
+    // A recovered receipt can confirm an all-time tie rather than a new best.
+    // Match its immutable ID, not a shared stage/time or a later profile name.
+    const acknowledgement=recovered.boards.find(board=>board.submissionId===resultSubmissionId);
+    if(phase==='complete'&&acknowledgement&&resultSeconds!==null)
+      resultWasNewBest=resultWasNewBest&&acknowledgement.isNewBest===true&&acknowledgement.me?.seconds===resultSeconds;
     if(resultSubmissionId)pendingSubmission=pendingRecords().some(record=>record.submissionId===resultSubmissionId);
     paintPendingRecords();
     // Recovery owns only saved receipts. It never resumes the game or changes
@@ -381,11 +383,11 @@ function editNickname(){
 }
 async function saveNickname(){
   if(!isRankingScreen()||nicknameSaving||leaderboardSyncing||!nicknameEditing)return;
-  const version=runVersion,stage=rankingStage,name=$('result-nickname').value;
+  const version=runVersion,name=$('result-nickname').value;
   if(!name.trim()){$('result-name-status').textContent='Enter a name.';$('result-nickname').focus();return;}
   nicknameSaving=true;$('result-name-status').textContent='Saving…';paintNickname();paintRankingControls();
   try {
-    const board=await leaderboard.updateNickname(name,{seconds:resultSeconds,localOnly:resultBoard?.scope==='browser',stage});
+    const board=await leaderboard.updateNickname(name,{seconds:resultSeconds,localOnly:resultBoard?.scope==='browser',stage:ALL_STAGE});
     if(version!==runVersion||!isRankingScreen())return;
     nicknameEditing=false;nicknameSaving=false;paintLeaderboard(board);
     $('result-name-status').textContent=board.profileSaved==='browser'?'Name saved on this device.':'Name saved.';
@@ -401,7 +403,7 @@ async function openRankings(){
   nicknameEditing=false;nicknameSaving=false;leaderboardSyncing=false;
   $('result-name-status').textContent='';setNewBestBadge(false);
   $('challenge-result').hidden=true;
-  paintLeaderboard(leaderboard.localBoard(null,{stage:rankingStage}));
+  paintLeaderboard(leaderboard.localBoard(null,{stage:ALL_STAGE}));
   showPhase();$('result-main').focus();
   // Browsing never starts the clock or uploads an old device-local best.
   await refreshRankings();
@@ -419,12 +421,15 @@ function finish(){
   const result=clock.finish(physicsNow ?? performance.now());
   release();phase='complete';accumulator=0;impactPresentation.clear();
   resultSeconds=Number(formatSeconds(result));
-  const storedBest=readBest(storage());
+  const storedBest=readAllTimeBest(storage());
   if(storedBest!==null)best=best===null?storedBest:Math.min(best,storedBest);
   const previousBest=best;
   best=best===null?resultSeconds:Math.min(best,resultSeconds);
-  const saved=saveBest(storage(),best);
+  // Archive only this actual run under its game rules. A faster historical
+  // all-time best must never be invented as a finish of the current version.
+  const saved=saveBest(storage(),resultSeconds);
   if(saved.best!==null)best=Math.min(best,saved.best);
+  cacheAllTimeBest(storage(),best);
   const isNewBest=resultSeconds===best&&(previousBest===null||resultSeconds<previousBest);
   updateBest();
   resultWasNewBest=isNewBest;
@@ -440,7 +445,7 @@ function finish(){
   nicknameEditing=false;nicknameSaving=false;leaderboardSyncing=false;
   $('result-nickname').value=leaderboard.hasNickname?leaderboard.nickname:'';
   $('result-name-status').textContent='';
-  paintLeaderboard(leaderboard.localBoard(best));
+  paintLeaderboard(leaderboard.localBoard(best,{stage:ALL_STAGE}));
   void syncLeaderboard();
   $('live-hint').textContent='All home. Ready for another run?';
   announce(`Move complete in ${formatSeconds(result)} seconds.`);
@@ -644,19 +649,6 @@ window.addEventListener('resize',()=>{renderer.resize();syncSettingsLayout();});
 syncSettingsLayout();
 $('motion').setAttribute('aria-pressed',String(reducedMotion));
 document.body.classList.toggle('reduce-motion',reducedMotion);
-$('result-rules').innerHTML=RANKING_RULESETS.map(rules=>`<option value="${rules.stage}">${rules.label}${rules.current?' · Current':' · Previous'}</option>`).join('');
-$('result-rules').value=rankingStage;
-$('result-rules').addEventListener('change',()=>{
-  const selected=$('result-rules').value;
-  if(nicknameSaving||!RANKING_RULESETS.some(rules=>rules.stage===selected)||!isRankingScreen()){
-    $('result-rules').value=rankingStage;return;
-  }
-  rankingStage=selected;
-  // Clear the old board immediately; its count/time must not masquerade as
-  // records under the newly selected rules while that request is in flight.
-  paintLeaderboard(leaderboard.localBoard(resultSeconds,{stage:selected}));
-  void refreshRankings();
-});
 $('result-refresh').addEventListener('click',()=>{void recoverPendingRankings({refresh:true});});
 paintRankingControls();
 if(LEADERBOARD_MODE==='device')$('view-rankings').textContent='MY RECORD';

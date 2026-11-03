@@ -1,5 +1,9 @@
 import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.34.0';
 
+// Aggregate views are derived reads; every completion keeps its original stage.
+export const ALL_STAGE=STAGE.endsWith('-qa')?'all-qa':'all';
+export const ALL_BEST_KEY=`room-to-boom:best:${ALL_STAGE}`;
+
 export const RANKING_RULESETS = Object.freeze([
   {stage:STAGE,label:'v0.34',current:true},
   {stage:'studio-overlap80-16-v33',label:'v0.33'},
@@ -9,10 +13,27 @@ export const RANKING_RULESETS = Object.freeze([
   {stage:'studio-triple-top-swap16-v29',label:'v0.29'},
   {stage:'studio-triple-swap16-v28',label:'v0.28'},
   {stage:'studio-triple-half16-v27',label:'v0.27'},
-].map(value=>Object.freeze(value)));
+].map(value=>Object.freeze({...value,stage:ALL_STAGE==='all-qa'&&!value.stage.endsWith('-qa')?`${value.stage}-qa`:value.stage})));
 function rankingStage(value){
-  if(!RANKING_RULESETS.some(rules=>rules.stage===value))throw new RangeError('Unsupported ranking rules');
+  if(value!==ALL_STAGE&&!RANKING_RULESETS.some(rules=>rules.stage===value))throw new RangeError('Unsupported ranking rules');
   return value;
+}
+
+// Keep the all-version personal best in a separate derived cache. Reading or
+// caching it never upgrades a historical time into a new current-stage finish.
+export function readAllTimeBest(storage){
+  const values=[readBest(storage,ALL_STAGE),...RANKING_RULESETS.map(({stage})=>readBest(storage,stage))]
+    .filter(value=>value!==null);
+  return values.length?Math.min(...values):null;
+}
+export function cacheAllTimeBest(storage,seconds){
+  const previous=readAllTimeBest(storage),value=normalizeSeconds(seconds);
+  const best=value===null?previous:previous===null?value:Math.min(previous,value);
+  let persisted=best!==null&&readBest(storage,ALL_STAGE)===best;
+  if(best!==null&&!persisted){
+    try{storage.setItem(ALL_BEST_KEY,JSON.stringify({stage:ALL_STAGE,seconds:best}));persisted=true;}catch{}
+  }
+  return{best,isNewBest:value!==null&&(previous===null||value<previous),persisted};
 }
 
 const PLAYER_KEY = 'room-to-boom:player-id';
@@ -102,7 +123,7 @@ export class LeaderboardClient {
     this.nickname=cleanNickname(savedName);
     this.hasNickname=this.read('room-to-boom:nickname-set')==='true'||!!savedName&&!['Player','플레이어'].includes(this.nickname);
     this.pending=Promise.resolve();this.profile=null;this.profilePromise=null;this.submissions=new Map();
-    this.deviceBest=null;
+    this.deviceBest=null;this.deviceAllTimeBest=null;
   }
   read(key){try{return this.storage?.getItem(key);}catch{return null;}}
   write(key,value){try{this.storage?.setItem(key,value);return !!this.storage;}catch{return false;}}
@@ -128,6 +149,7 @@ export class LeaderboardClient {
     if(board.playerId)this.adoptProfile({scope:'server',playerId:board.playerId,nickname:board.nickname??board.me?.nickname??this.nickname});
     else if(board.me)this.adoptProfile({scope:'server',playerId:board.me.playerId,nickname:board.me.nickname});
     const {token,...publicBoard}=board;
+    if(board.stage===ALL_STAGE&&board.me)cacheAllTimeBest(this.storage,board.me.seconds);
     return publicBoard;
   }
   enqueue(action){const pending=this.pending.then(action,action);this.pending=pending.catch(()=>{});return pending;}
@@ -175,8 +197,8 @@ export class LeaderboardClient {
   }
   localBoard(seconds,{stage=STAGE}={}) {
     rankingStage(stage);
-    const current=stage===STAGE,known=readBest(this.storage,stage),given=current?normalizeSeconds(seconds):null;
-    const candidates=[known,given,...(!this.serverEnabled&&current?[this.deviceBest]:[])].filter(value=>value!==null);
+    const all=stage===ALL_STAGE,current=stage===STAGE,known=all?readAllTimeBest(this.storage):readBest(this.storage,stage),given=current||all?normalizeSeconds(seconds):null;
+    const candidates=[known,given,...(!this.serverEnabled&&(current||all)?[all?this.deviceAllTimeBest:this.deviceBest]:[])].filter(value=>value!==null);
     const best=candidates.length?Math.min(...candidates):null;
     const me=best===null?null:{rank:1,position:1,tied:false,playerId:this.playerId,nickname:this.nickname,seconds:best,isMe:true};
     return {scope:'browser',stage,total:me?1:0,top:me?[me]:[],me,persisted:known!==null&&(this.serverEnabled||known===best)};
@@ -254,7 +276,7 @@ export class LeaderboardClient {
       if(stored)this.outboxEntries.set(id,stored);
       else if(!this.volatileEntries.has(id))this.outboxEntries.delete(id);
     }
-    return [...this.outboxEntries.values()].filter(entry=>stage===undefined||entry.stage===stage)
+    return [...this.outboxEntries.values()].filter(entry=>stage===undefined||stage===ALL_STAGE||entry.stage===stage)
       .sort((a,b)=>a.createdAt-b.createdAt||a.submissionId.localeCompare(b.submissionId))
       .map(({schema,...entry})=>({...entry}));
   }
@@ -297,7 +319,9 @@ export class LeaderboardClient {
             board={...validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(entry.stage)}`),entry.stage),...acknowledgement};
           }catch{board={...board,nicknamePending:true};}
         }
-        return this.adoptBoard(board);
+        // Receipt identity is client-side acknowledgement metadata only; it
+        // never changes the immutable request or the server's ranking rows.
+        return {...this.adoptBoard(board),submissionId:entry.submissionId};
       }catch{
         this.profile=null;this.retryAfter.set(entry.submissionId,Date.now()+1000);
         const extra={syncError:true,submissionPending:true,pendingDurable:!this.volatileEntries.has(entry.submissionId)};
@@ -353,10 +377,11 @@ export class LeaderboardClient {
     const promise=this.enqueue(async()=>{
       if(!this.serverEnabled){
         if(nickname!==undefined)this.setNickname(nickname);
-        const previous=this.localBoard(null).me?.seconds??null;
-        saveBest(this.storage,value);
+        const previous=this.localBoard(null).me?.seconds??null,allPrevious=this.localBoard(null,{stage:ALL_STAGE}).me?.seconds??null;
+        saveBest(this.storage,value);cacheAllTimeBest(this.storage,value);
         this.deviceBest=previous===null?value:Math.min(previous,value);
-        return {...this.localBoard(value),isNewBest:previous===null||value<previous};
+        this.deviceAllTimeBest=allPrevious===null?value:Math.min(allPrevious,value);
+        return {...this.localBoard(value),isNewBest:allPrevious===null||value<allPrevious};
       }
       return await this.sendPending(entry)||this.refreshBoard(value,STAGE);
     });

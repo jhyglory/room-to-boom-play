@@ -985,26 +985,22 @@ img.result-avatar { object-fit: contain; }
 .result-share #manual-share { display: block; width: 100%; margin-top: 4px; text-align: left; }
 
 
-/* One shared board, with old rule competitions available without mixing times. */
-.result-ranking-tools { display: flex; align-items: center; gap: 8px; padding: 0 5px 5px; flex: none; }
-.ranking-rules-note { flex: none; margin: 0 6px 7px; color: #f4dfbd; font-size: 10px; line-height: 1.35; }
-.result-ranking-tools label { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; color: #f7e8cf; font-size: 11px; font-weight: 900; }
-.result-ranking-tools select { flex: 1; min-width: 0; min-height: 44px; padding: 5px 24px 5px 9px; border: 1px solid #e5cb9b; border-radius: 9px; background: #fff4db; color: #223c50; font: 800 12px Nunito, sans-serif; }
-#result-refresh { min-height: 44px; padding: 5px 10px; border: 1px solid #e5b351; border-radius: 9px; background: #ffce56; color: #223c50; font: 1000 11px Nunito, sans-serif; }
+/* One all-time board. Refresh stays reachable beside the heading. */
+.ranking-scope-note { flex: none; margin: 0 6px 7px; color: #f4dfbd; font-size: 10px; line-height: 1.35; }
+#result-refresh { flex: none; min-height: 44px; padding: 5px 10px; border: 1px solid #e5b351; border-radius: 9px; background: #ffce56; color: #223c50; font: 1000 11px Nunito, sans-serif; }
 #result-refresh:disabled { opacity: .65; }
-.result-ranking-tools select:focus-visible, #result-refresh:focus-visible { outline: 3px solid #72ffd3; outline-offset: 2px; }
-.result-ranking-heading { flex-wrap: wrap; column-gap: 5px; }
+#result-refresh:focus-visible { outline: 3px solid #72ffd3; outline-offset: 2px; }
+.result-ranking-heading { flex-wrap: wrap; column-gap: 5px; padding: 1px 4px 3px; }
 .result-ranking-heading h3 { font-size: 15px; white-space: nowrap; }
 .result-ranking-heading p { margin-left: auto; }
 @media (max-width: 359px) {
   .result-ranking-heading h3 { font-size: 13px; }
+  .result-ranking-heading h3::before { display: none; }
   .result-ranking-heading p { font-size: 9px; }
-  .result-ranking-tools { gap: 5px; padding-inline: 1px; }
-  .result-ranking-tools label { gap: 4px; font-size: 10px; }
-  .result-ranking-tools select { font-size: 11px; padding-left: 6px; }
   #result-refresh { padding-inline: 7px; font-size: 10px; }
+  .result-table-rows { padding-block: 0 4px; scroll-padding-block: 0 4px; }
 }
 
-.result-ranking { grid-template-rows: auto auto auto minmax(0, 1fr); }
+.result-ranking { grid-template-rows: auto auto minmax(0, 1fr); }
 .result-panel:has(#result-nickname-form:not([hidden])) .result-ranking,
-.result-panel:has(#manual-share:not([hidden])) .result-ranking { grid-template-rows: auto auto auto auto; }
+.result-panel:has(#manual-share:not([hidden])) .result-ranking { grid-template-rows: auto auto auto; }
