@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.30.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.31.0';
 
-// v30 increases sliding drag and rebound1.2× and doubles lamp fracture efficiency; preserve earlier rules and identities.
-export const STAGE = 'studio-billiards16-v30';
+// v31 changes room, hall and separator geometry; preserve earlier records and identities.
+export const STAGE = 'studio-single-hall16-v31';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

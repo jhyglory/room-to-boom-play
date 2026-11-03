@@ -1,4 +1,4 @@
-import { WORLD } from './engine.js?v=0.30.0';
+import { WORLD } from './engine.js?v=0.31.0';
 import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.30.0';
 import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.30.0';
 import { ImpactBursts } from './impact-burst.js?v=0.30.0';
@@ -453,7 +453,9 @@ export class GameRenderer {
     const x = WORLD.doorway.centerX;
     // A short orientation mark stays in the shared central doorway. It is
     // not a trajectory, nor does its placement assume a former wall layout.
-    const tipY = WORLD.corridor.minY + 7, tailY = WORLD.corridor.maxY - 7;
+    const middle = (WORLD.corridor.minY + WORLD.corridor.maxY) / 2;
+    const length = Math.min(48, WORLD.corridor.maxY - WORLD.corridor.minY - 14);
+    const tipY = middle - length / 2, tailY = middle + length / 2;
     const wingY = tipY + Math.min(8, (tailY - tipY) / 2);
     stroke(ctx, [[x, tailY], [x, tipY]], '#84a18a', 2.5);
     ctx.setLineDash([]);
@@ -632,7 +634,7 @@ export class GameRenderer {
     const debris = this.getAsset('wall_debris');
     if (debris) ctx.drawImage(debris, CENTER_X + 85, 650, 82, 82);
     text(ctx, 'Original PNGs · full furniture frames · uniform floor cover × 1.5', CENTER_X, HEIGHT - 71, 9, '#84735f', 700);
-    text(ctx, 'v22 shared wide rooms · removed colliders open their full gap', CENTER_X, HEIGHT - 46, 8, '#84735f', 700);
+    text(ctx, 'Compact rooms · one wall · removed colliders open the passage', CENTER_X, HEIGHT - 46, 8, '#84735f', 700);
     text(ctx, 'Vertical walls rotate their source lighting; no decorative frame overlay.', CENTER_X, HEIGHT - 21, 8, '#84735f', 700);
     ctx.restore();
   }

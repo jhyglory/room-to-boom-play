@@ -2,15 +2,15 @@
 export const WORLD = Object.freeze({
   width: 520,
   height: 816,
-  delivery: Object.freeze({ minX: 56, maxX: 464, minY: 43, maxY: 359 }),
-  oldInterior: Object.freeze({ minX:56,maxX:464,minY:431,maxY:747 }),
+  delivery: Object.freeze({ minX: 56, maxX: 464, minY: 43, maxY: 289 }),
+  oldInterior: Object.freeze({ minX:56,maxX:464,minY:501,maxY:747 }),
   rooms: Object.freeze({
-    old: Object.freeze({ minX:47,maxX:473,minY:422,maxY:756 }),
-    new: Object.freeze({ minX:47,maxX:473,minY:34,maxY:368 }),
+    old: Object.freeze({ minX:47,maxX:473,minY:492,maxY:756 }),
+    new: Object.freeze({ minX:47,maxX:473,minY:34,maxY:298 }),
   }),
   doorway: Object.freeze({ minX:190,maxX:330,centerX:260 }),
-  corridor: Object.freeze({ minY:377,maxY:413 }),
-  separatorRows: Object.freeze([368,395,422]),
+  corridor: Object.freeze({ minY:307,maxY:483 }),
+  separatorRows: Object.freeze([395]),
 });
 
 export const REFERENCE_FURNITURE = Object.freeze([
@@ -35,14 +35,24 @@ export const REFERENCE_FURNITURE = Object.freeze([
 ]);
 const FURNITURE_SCALE=.85;
 const PORTRAIT_LAYOUT=Object.freeze({
-  // Exchange the top rows, clearing both the tall wardrobe and painted wall.
-  wardrobe:[142,481],desk:[243,481],bookcase:[333,481],plant:[399,481],
-  bed:[169,568],boxA:[260,568],fridge:[323,568],washing_machine:[391,568],
-  // Swap the lower two rows while retaining their own horizontal spacing.
-  // The sofa's full soft artwork extends42.11 below its pivot. These rows
-  // clear both that artwork and the actual TV-stand/armchair colliders.
-  sofa:[126,700],armchair:[225,700],dresser:[310,700],table:[405.5,700],
-  chair:[165.5,642],tv_stand:[237.85,642],boxB:[307.65,642],lamp:[360.45,642],
+  // Three compact rows fit both the actual bodies and the complete alpha16
+  // artwork inside the smaller room without changing furniture scale.
+  wardrobe:[102.71328125000001,553.0774134790529],
+  bed:[217.08098958333335,553.0774134790529],
+  fridge:[309.33098958333335,553.0774134790529],
+  bookcase:[372.6809895833333,553.0774134790529],
+  chair:[434.3309895833333,553.1065535139163],
+  sofa:[115.72738883495427,631.9596539162113],
+  boxA:[195.4255673413295,637.1964285714287],
+  boxB:[246.25621577091408,638.1757092198582],
+  plant:[293.72404633818735,638.45],
+  dresser:[357.87484228608895,637.4433287482807],
+  washing_machine:[431.4427349009919,638.4851724137932],
+  desk:[112.78163309784796,709.3725865209472],
+  table:[213.90869069220412,709.3725865209472],
+  lamp:[279.74204413008107,709.3976185311905],
+  armchair:[336.4319175478026,709.3725865209472],
+  tv_stand:[415.4171192483524,709.3725865209472],
 });
 export const FURNITURE=Object.freeze(REFERENCE_FURNITURE.map(spec=>Object.freeze({
   ...spec,x:PORTRAIT_LAYOUT[spec.id][0],y:PORTRAIT_LAYOUT[spec.id][1],
@@ -235,24 +245,19 @@ export class MovingWorld {
     wall('world-top',260,8,520,16,false,true);
     wall('world-bottom',260,808,520,16,false,true);
     wall('old-top',260,756,444,18);
-    wall('old-left',47,589,18,352);
-    wall('old-right',473,589,18,352);
-    wall('old-bottom-left',64,422,52,18);
-    wall('old-weak',140,422,100,18,true);
-    wall('old-bottom-right',406,422,152,18);
-    // Both weak runs meet the same side of the open doorway. Each contacted
-    // panel must still fracture separately, but the route continues upstairs
-    // instead of ending at the neighboring normal-strength wall row.
-    wall('new-top-left',64,368,52,18);
-    wall('new-weak',140,368,100,18,true);
-    wall('new-top-right',406,368,152,18);
-    // A third independent layer fills the transition only. Its central door
-    // stays aligned with both room doors; HP and all v25 motion stay unchanged.
-    wall('middle-left',64,395,52,18);
-    wall('middle-weak',140,395,100,18,true);
-    wall('middle-right',406,395,152,18);
-    wall('new-left',47,201,18,352);
-    wall('new-right',473,201,18,352);
+    // Room walls extend9units into their end caps. Hall walls meet them
+    // edge-to-edge, leaving one continuous frame without stacked colliders.
+    wall('old-left',47,624,18,282);
+    wall('old-right',473,624,18,282);
+    wall('hall-left',47,395,18,176);
+    wall('hall-right',473,395,18,176);
+    // One barrier crosses the wider hall. Its two weak panels sit beside
+    // the unchanged140-unit central door; outer ends meet the side rails.
+    wall('old-bottom-left',73,395,34,18);
+    wall('old-weak',140,395,100,18,true);
+    wall('old-bottom-right',397,395,134,18);
+    wall('new-left',47,166,18,282);
+    wall('new-right',473,166,18,282);
     wall('new-bottom',260,34,444,18);
     Composite.add(this.engine.world, [...this.walls, ...this.bodies]);
     Events.on(this.engine, 'collisionStart', (event) => this._collisions(event));

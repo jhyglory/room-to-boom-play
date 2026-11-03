@@ -1,7 +1,8 @@
-import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.30.0';
+import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.31.0';
 
 export const RANKING_RULESETS = Object.freeze([
-  {stage:STAGE,label:'v0.30',current:true},
+  {stage:STAGE,label:'v0.31',current:true},
+  {stage:'studio-billiards16-v30',label:'v0.30'},
   {stage:'studio-triple-top-swap16-v29',label:'v0.29'},
   {stage:'studio-triple-swap16-v28',label:'v0.28'},
   {stage:'studio-triple-half16-v27',label:'v0.27'},

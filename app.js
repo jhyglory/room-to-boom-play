@@ -1,11 +1,11 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.30.0';
-import { GameRenderer } from './render.js?v=0.30.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.31.0';
+import { GameRenderer } from './render.js?v=0.31.0';
 import { WALL_RENDER } from './assets.js?v=0.30.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.30.0';
+import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.31.0';
 import { GameAudio } from './audio.js?v=0.30.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.30.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.31.0';
 import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.30.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -640,7 +640,7 @@ if(completionQA)canvas.addEventListener('room-to-boom:inspect',event=>{
     bodies:world.bodies.map(body=>({id:body.game.id,position:{...body.position},velocity:{...world.M.Body.getVelocity(body)},mass:body.mass,restitution:body.restitution,angle:body.angle,angularVelocity:world.M.Body.getAngularVelocity(body),vertices:body.vertices.map(({x,y})=>({x,y})),w:body.game.w,h:body.game.h,
       maxLaunchSpeed:body.game.maxLaunchSpeed,minimumLaunchSpeed:body.game.minimumLaunchSpeed,
       frictionAir:body.frictionAir,floorDamping:body.game.floorDamping,delivered:body.game.delivered})),
-    walls:world.walls.map(wall=>({id:wall.game.id,group:wall.game.group,position:{...wall.position},w:wall.game.w,h:wall.game.h,health:wall.game.health,maxHealth:wall.game.maxHealth,colliderActive:activeBodies.has(wall),lastHitEnergy:wall.game.lastHitEnergy,lastHitDamage:wall.game.lastHitDamage,cracked:wall.game.cracked,broken:wall.game.broken,hidden:wall.game.hidden}))};
+    walls:world.walls.map(wall=>({id:wall.game.id,group:wall.game.group,position:{...wall.position},w:wall.game.w,h:wall.game.h,weak:wall.game.weak,health:wall.game.health,maxHealth:wall.game.maxHealth,colliderActive:activeBodies.has(wall),lastHitEnergy:wall.game.lastHitEnergy,lastHitDamage:wall.game.lastHitDamage,cracked:wall.game.cracked,broken:wall.game.broken,hidden:wall.game.hidden}))};
 });
 
 function advanceSimulation(now){
