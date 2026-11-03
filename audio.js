@@ -1,9 +1,10 @@
 // Gesture-unlocked material percussion and staccato wall POPs for v18.1.
 // Fabric, wood, metal, cardboard and ceramic differ in resonance and decay;
-// small deterministic pitch cycles keep repeated hits tactile without raising
-// the master mix. No recorded audio or background music is used.
+// small deterministic pitch cycles keep repeated hits tactile. v30.1 doubles
+// the master level while retaining the peak guard and authored cue envelopes.
+// No recorded audio or background music is used.
 export const AUDIO_LEVELS = Object.freeze({
-  masterGain: .45,
+  masterGain: .9,
   maxVoices: 24,
   // Calibrated against v10 offline output: the new short material envelopes
   // need this local mix compensation to retain comparable audible energy.
