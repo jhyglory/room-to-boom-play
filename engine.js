@@ -2,15 +2,17 @@
 export const WORLD = Object.freeze({
   width: 520,
   height: 816,
-  delivery: Object.freeze({ minX: 56, maxX: 464, minY: 43, maxY: 289 }),
-  oldInterior: Object.freeze({ minX:56,maxX:464,minY:501,maxY:747 }),
+  // The shared v36 map transfers 40 units from each end of the road into
+  // the rooms. Furniture bodies and their initial positions stay unchanged.
+  delivery: Object.freeze({ minX: 56, maxX: 464, minY: 43, maxY: 329 }),
+  oldInterior: Object.freeze({ minX:56,maxX:464,minY:461,maxY:747 }),
   rooms: Object.freeze({
-    old: Object.freeze({ minX:47,maxX:473,minY:492,maxY:756 }),
-    new: Object.freeze({ minX:47,maxX:473,minY:34,maxY:298 }),
+    old: Object.freeze({ minX:47,maxX:473,minY:452,maxY:756 }),
+    new: Object.freeze({ minX:47,maxX:473,minY:34,maxY:338 }),
   }),
   doorway: Object.freeze({ minX:204,maxX:316,centerX:260 }),
-  corridor: Object.freeze({ minY:307,maxY:483 }),
-  separatorRows: Object.freeze([298,492]),
+  corridor: Object.freeze({ minY:347,maxY:443 }),
+  separatorRows: Object.freeze([338,452]),
 });
 
 export const REFERENCE_FURNITURE = Object.freeze([
@@ -299,8 +301,13 @@ export class MovingWorld {
     wall('old-top',260,756,444,18);
     // Each room has its own frame. Its side walls extend9units into the
     // horizontal end caps; the road between the two rooms has no side wall.
-    wall('old-left',47,624,18,282);
-    wall('old-right',473,624,18,282);
+    const sides = (name, room) => {
+      const centerY = (room.minY + room.maxY) / 2;
+      const height = room.maxY - room.minY + 18;
+      wall(`${name}-left`, room.minX, centerY, 18, height);
+      wall(`${name}-right`, room.maxX, centerY, 18, height);
+    };
+    sides('old', WORLD.rooms.old);
     // Both112-unit entrance gaps follow the same doorway metadata. Extend
     // the adjacent wall runs14units toward the center on each side, retaining
     // the52-unit left corner and two independently destructible weak panels.
@@ -316,8 +323,7 @@ export class MovingWorld {
     };
     entrance(WORLD.rooms.old, WORLD.rooms.old.minY, ['old-bottom-left','old-weak','old-bottom-right']);
     entrance(WORLD.rooms.new, WORLD.rooms.new.maxY, ['new-top-left','new-weak','new-top-right']);
-    wall('new-left',47,166,18,282);
-    wall('new-right',473,166,18,282);
+    sides('new', WORLD.rooms.new);
     wall('new-bottom',260,34,444,18);
     Composite.add(this.engine.world, [...this.walls, ...this.bodies]);
     Events.on(this.engine, 'collisionStart', (event) => this._collisions(event));

@@ -485,7 +485,10 @@ body.reduce-motion * { transition: none !important; }
     flex: none;
     width: min(100%, calc((100dvh - var(--mobile-hud-height) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * var(--world-view-ratio, .6372549020)));
     height: auto; max-width: 100%; aspect-ratio: var(--world-view-ratio, .6372549020);
-    margin: auto; border-radius: 8px;
+    /* The width-limited portrait board used to center in the remaining height,
+       creating 60px of empty space below the HUD at 390×844. Keep any spare
+       height below the board so the actual rooms begin beside the controls. */
+    margin: 0 auto; border-radius: 8px;
   }
   body:is([data-phase="playing"], [data-phase="paused"]) #desktop-controls-slot { display: none; }
   #pause-overlay { padding: 12px; }

@@ -1,8 +1,8 @@
-import { WORLD } from './engine.js?v=0.34.0';
-import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.30.0';
+import { WORLD } from './engine.js?v=0.36.0';
+import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.36.0';
 import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.30.0';
 import { ImpactBursts } from './impact-burst.js?v=0.30.0';
-import { FurnitureImpacts } from './furniture-impact.js?v=0.30.0';
+import { FurnitureImpacts } from './furniture-impact.js?v=0.36.0';
 
 const WIDTH = WORLD.width;
 const HEIGHT = WORLD.height;
@@ -239,7 +239,18 @@ export class GameRenderer {
 
   addFurnitureImpact(body, info = {}) {
     this.advanceImpactEffects();
-    return this.furnitureImpacts.add(body, info);
+    return this.furnitureImpacts.add(body, info, { reducedMotion: this.reducedMotion });
+  }
+
+  addFurnitureCollision(body, other, info = {}) {
+    const primary = this.addFurnitureImpact(body, info);
+    // Both members of a genuine furniture contact receive their own local
+    // painted response. Keep audio and the shared wall/contact cloud single.
+    if (other?.game?.kind && !other.isStatic) this.addFurnitureImpact(other, { ...info,
+      normal: info.normal ? { x: -info.normal.x, y: -info.normal.y } : null,
+      contactArm: info.otherContactArm || info.otherArm,
+      velocity: info.otherVelocity || other.velocity });
+    return primary;
   }
 
   addWallResponse(wall, info, hit) {
@@ -314,8 +325,8 @@ export class GameRenderer {
     this.ensureImpactEffects();
     this.reducedMotion = reducedMotion;
     this.advanceImpactEffects(dt);
-    if (reducedMotion) this.furnitureImpacts.clear();
-    if (phase === 'complete') { this.impactBursts.clear(); this.furnitureImpacts.clear(); this.shake = null; }
+    if (reducedMotion) this.furnitureImpacts.clearMotion();
+    if (phase === 'complete') { this.impactBursts.clear(); this.furnitureImpacts.clearMotion(); this.shake = null; }
     if (reducedMotion) {
       this.particles = []; this.impacts = []; this.wallBreaks = []; this.shake = null;
     }
@@ -358,6 +369,7 @@ export class GameRenderer {
     }
     this.drawEffects(ctx, dt, reducedMotion);
     this.impactBursts.draw(ctx, { reducedMotion, cssScale: this.cssScale || 1, layer: 'chips' });
+    this.furnitureImpacts.drawChips(ctx, { reducedMotion });
     if (grabbed && phase === 'playing') this.drawAim(ctx, grabbed);
   }
 
@@ -814,11 +826,13 @@ export class GameRenderer {
       { reducedMotion: this.reducedMotion, aiming: selected });
     ctx.save();
     if (deformation?.active) {
+      ctx.rotate(deformation.frameAngle || 0);
       ctx.rotate(deformation.angle);
       ctx.transform(deformation.scaleNormal, 0, deformation.shear, deformation.scaleTangent, 0, 0);
       ctx.rotate(-deformation.angle);
     }
     this.drawRegisteredSprite(ctx, g.kind);
+    this.furnitureImpacts?.drawMarks(ctx, body);
     ctx.restore();
     if (g.delivered) {
       ellipse(ctx, w / 2 - 3, -h / 2 + 2, 10, 10, '#e7f2d9', '#7aa17a', 1.8);

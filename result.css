@@ -985,7 +985,7 @@ img.result-avatar { object-fit: contain; }
 .result-share #manual-share { display: block; width: 100%; margin-top: 4px; text-align: left; }
 
 
-/* One all-time board. Refresh stays reachable beside the heading. */
+/* Current competition first; history and maintenance controls are secondary. */
 .ranking-scope-note { flex: none; margin: 0 6px 7px; color: #f4dfbd; font-size: 10px; line-height: 1.35; }
 #result-refresh { flex: none; min-height: 44px; padding: 5px 10px; border: 1px solid #e5b351; border-radius: 9px; background: #ffce56; color: #223c50; font: 1000 11px Nunito, sans-serif; }
 #result-refresh:disabled { opacity: .65; }
@@ -1001,6 +1001,28 @@ img.result-avatar { object-fit: contain; }
   .result-table-rows { padding-block: 0 4px; scroll-padding-block: 0 4px; }
 }
 
-.result-ranking { grid-template-rows: auto auto minmax(0, 1fr); }
+.result-ranking { grid-template-rows: auto minmax(0, 1fr); }
+.result-ranking:has(#ranking-scope-note:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }
 .result-panel:has(#result-nickname-form:not([hidden])) .result-ranking,
 .result-panel:has(#manual-share:not([hidden])) .result-ranking { grid-template-rows: auto auto auto; }
+
+.result-ranking-options { position: relative; margin: 0; color: #65543e; font-size: 11px; }
+.result-ranking-options summary { display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 44px; cursor: pointer; font-weight: 900; list-style: none; }
+.result-ranking-options summary::after { content: '+'; font-size: 16px; }
+.result-ranking-options[open] summary::after { content: '−'; }
+.result-ranking-options summary::-webkit-details-marker { display: none; }
+.result-ranking-options-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px; padding: 3px 5px 8px; border-top: 1px solid #d4c19c; }
+.result-ranking-options-controls label { width: 100%; text-align: center; font-size: 10px; font-weight: 800; }
+.result-ranking-options-controls select,
+.result-ranking-options-controls button { min-width: 0; max-width: 100%; min-height: 44px; border: 1px solid #c3af89; border-radius: 8px; background: #fff9eb; color: #263c4b; padding: 5px 9px; font: 800 11px Nunito,sans-serif; }
+.result-ranking-options-controls select { flex: 1 1 120px; }
+.result-ranking-options summary:focus-visible,
+.result-ranking-options-controls select:focus-visible { outline: 3px solid #1a9b83; outline-offset: 1px; }
+.result-panel:has(#result-ranking-options[open]) { overflow-y: auto; overscroll-behavior: contain; }
+.result-panel:has(#result-ranking-options[open]) .result-ranking { flex: none; min-height: 150px; grid-template-rows: auto auto; }
+.result-panel:has(#result-ranking-options[open]) .result-table-rows { max-height: 120px; }
+@media (max-height: 710px) {
+  .result-heading-wrap { width: min(100%, 220px); }
+  .result-panel-head { padding-bottom: 4px; }
+  .result-ranking-options summary { min-height: 44px; }
+}
