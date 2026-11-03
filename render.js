@@ -1,4 +1,4 @@
-import { WORLD } from './engine.js?v=0.33.0';
+import { WORLD } from './engine.js?v=0.34.0';
 import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.30.0';
 import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.30.0';
 import { ImpactBursts } from './impact-burst.js?v=0.30.0';

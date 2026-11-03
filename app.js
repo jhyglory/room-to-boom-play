@@ -1,11 +1,11 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.33.0';
-import { GameRenderer } from './render.js?v=0.33.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.34.0';
+import { GameRenderer } from './render.js?v=0.34.0';
 import { WALL_RENDER } from './assets.js?v=0.30.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.33.0';
+import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.34.0';
 import { GameAudio } from './audio.js?v=0.30.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.33.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.34.0';
 import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.30.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}

@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.33.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.34.0';
 
-// v33 accepts 80% physical-area overlap after 500ms calm and revokes delivery on exit; preserve earlier records and identities.
-export const STAGE = 'studio-overlap80-16-v33';
+// v34 narrows both centered room entrances to 112 units; retain v33 delivery rules and preserve earlier records and identities.
+export const STAGE = 'studio-narrow-entries16-v34';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

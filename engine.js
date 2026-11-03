@@ -8,7 +8,7 @@ export const WORLD = Object.freeze({
     old: Object.freeze({ minX:47,maxX:473,minY:492,maxY:756 }),
     new: Object.freeze({ minX:47,maxX:473,minY:34,maxY:298 }),
   }),
-  doorway: Object.freeze({ minX:190,maxX:330,centerX:260 }),
+  doorway: Object.freeze({ minX:204,maxX:316,centerX:260 }),
   corridor: Object.freeze({ minY:307,maxY:483 }),
   separatorRows: Object.freeze([298,492]),
 });
@@ -301,15 +301,21 @@ export class MovingWorld {
     // horizontal end caps; the road between the two rooms has no side wall.
     wall('old-left',47,624,18,282);
     wall('old-right',473,624,18,282);
-    // A single wall depth borders each room entrance, with aligned140-unit
-    // doors. Each weak run has two independent panels. No wall crosses the
-    // middle of the road, and no third layer remains between these frames.
-    wall('old-bottom-left',64,492,52,18);
-    wall('old-weak',140,492,100,18,true);
-    wall('old-bottom-right',406,492,152,18);
-    wall('new-top-left',64,298,52,18);
-    wall('new-weak',140,298,100,18,true);
-    wall('new-top-right',406,298,152,18);
+    // Both112-unit entrance gaps follow the same doorway metadata. Extend
+    // the adjacent wall runs14units toward the center on each side, retaining
+    // the52-unit left corner and two independently destructible weak panels.
+    // The road between these single-depth room boundaries stays unobstructed.
+    const entrance = (room, y, groups) => {
+      const left = room.minX - 9, right = room.maxX + 9;
+      const leftCornerWidth = 52, weakStart = left + leftCornerWidth;
+      const weakLength = WORLD.doorway.minX - weakStart;
+      const rightLength = right - WORLD.doorway.maxX;
+      wall(groups[0], left + leftCornerWidth / 2, y, leftCornerWidth, 18);
+      wall(groups[1], (weakStart + WORLD.doorway.minX) / 2, y, weakLength, 18, true);
+      wall(groups[2], (WORLD.doorway.maxX + right) / 2, y, rightLength, 18);
+    };
+    entrance(WORLD.rooms.old, WORLD.rooms.old.minY, ['old-bottom-left','old-weak','old-bottom-right']);
+    entrance(WORLD.rooms.new, WORLD.rooms.new.maxY, ['new-top-left','new-weak','new-top-right']);
     wall('new-left',47,166,18,282);
     wall('new-right',473,166,18,282);
     wall('new-bottom',260,34,444,18);
