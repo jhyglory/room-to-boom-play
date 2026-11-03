@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.31.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.32.0';
 
-// v31 changes room, hall and separator geometry; preserve earlier records and identities.
-export const STAGE = 'studio-single-hall16-v31';
+// v32 opens the central hall and places one wall at each room entrance; preserve earlier records and identities.
+export const STAGE = 'studio-room-entries16-v32';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

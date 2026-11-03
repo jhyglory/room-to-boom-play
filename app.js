@@ -1,11 +1,11 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.31.0';
-import { GameRenderer } from './render.js?v=0.31.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.32.0';
+import { GameRenderer } from './render.js?v=0.32.0';
 import { WALL_RENDER } from './assets.js?v=0.30.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.31.0';
+import { STAGE, readBest, saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.32.0';
 import { GameAudio } from './audio.js?v=0.30.1';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.31.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, RANKING_RULESETS } from './leaderboard.js?v=0.32.0';
 import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.30.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -99,9 +99,8 @@ function updateCoach(now){
   if(phase!=='playing'||now>=coachUntil)$('control-coach').hidden=true;
 }
 function hasConnectedShortcut(){
-  // An opening is useful only when the same clear span exists through every
-  // separator layer. Breaking the two outer rows must not announce a shortcut
-  // while the new middle layer still blocks it.
+  // A shortcut connects the rooms only when both entrance boundaries have
+  // a matching clear span. One broken boundary alone is not a through-route.
   let spans=[[-Infinity,Infinity]];
   for(const y of WORLD.separatorRows){
     const gaps=world.walls.filter(w=>w.game.weak&&w.game.broken&&Math.abs(w.position.y-y)<1)

@@ -10,7 +10,7 @@ export const WORLD = Object.freeze({
   }),
   doorway: Object.freeze({ minX:190,maxX:330,centerX:260 }),
   corridor: Object.freeze({ minY:307,maxY:483 }),
-  separatorRows: Object.freeze([395]),
+  separatorRows: Object.freeze([298,492]),
 });
 
 export const REFERENCE_FURNITURE = Object.freeze([
@@ -245,17 +245,19 @@ export class MovingWorld {
     wall('world-top',260,8,520,16,false,true);
     wall('world-bottom',260,808,520,16,false,true);
     wall('old-top',260,756,444,18);
-    // Room walls extend9units into their end caps. Hall walls meet them
-    // edge-to-edge, leaving one continuous frame without stacked colliders.
+    // Each room has its own frame. Its side walls extend9units into the
+    // horizontal end caps; the road between the two rooms has no side wall.
     wall('old-left',47,624,18,282);
     wall('old-right',473,624,18,282);
-    wall('hall-left',47,395,18,176);
-    wall('hall-right',473,395,18,176);
-    // One barrier crosses the wider hall. Its two weak panels sit beside
-    // the unchanged140-unit central door; outer ends meet the side rails.
-    wall('old-bottom-left',73,395,34,18);
-    wall('old-weak',140,395,100,18,true);
-    wall('old-bottom-right',397,395,134,18);
+    // A single wall depth borders each room entrance, with aligned140-unit
+    // doors. Each weak run has two independent panels. No wall crosses the
+    // middle of the road, and no third layer remains between these frames.
+    wall('old-bottom-left',64,492,52,18);
+    wall('old-weak',140,492,100,18,true);
+    wall('old-bottom-right',406,492,152,18);
+    wall('new-top-left',64,298,52,18);
+    wall('new-weak',140,298,100,18,true);
+    wall('new-top-right',406,298,152,18);
     wall('new-left',47,166,18,282);
     wall('new-right',473,166,18,282);
     wall('new-bottom',260,34,444,18);

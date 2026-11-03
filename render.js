@@ -1,4 +1,4 @@
-import { WORLD } from './engine.js?v=0.31.0';
+import { WORLD } from './engine.js?v=0.32.0';
 import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.30.0';
 import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.30.0';
 import { ImpactBursts } from './impact-burst.js?v=0.30.0';
@@ -388,12 +388,22 @@ export class GameRenderer {
 
   drawGround(ctx) {
     ctx.fillStyle = '#faf4e7'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    const left = ROOMS.old.minX, right = ROOMS.old.maxX, width = right - left;
-    rounded(ctx, left - 14, 20, width + 28, HEIGHT - 45, 14, '#e9e8db', '#d5d5c3', 1);
-    // A quiet transition backdrop makes each missing wall segment legible immediately
-    // after the brief dust clears, without a decorative rail in the passage.
-    rounded(ctx, left - 9, ROOMS.new.maxY + 9, width + 18,
-      ROOMS.old.minY - ROOMS.new.maxY - 18, 8, '#eee9d7', '#d6d0b9', 1);
+    const road = WORLD.corridor;
+    // The rooms are independent frames beside an open horizontal road. The
+    // center marking is only paint: no rendered or physical wall crosses it.
+    ctx.fillStyle = '#c7c7bc';
+    ctx.fillRect(0, road.minY, WIDTH, road.maxY - road.minY);
+    ctx.save(); ctx.setLineDash([18, 16]);
+    const centerY = (road.minY + road.maxY) / 2;
+    // Leave a small unpainted interval around the separate upward guide.
+    stroke(ctx, [[0, centerY], [CENTER_X - 22, centerY]], '#f4efdc', 3.2);
+    stroke(ctx, [[CENTER_X + 22, centerY], [WIDTH, centerY]], '#f4efdc', 3.2);
+    ctx.restore();
+    for (const room of Object.values(ROOMS)) {
+      rounded(ctx, room.minX - 14, room.minY - 14,
+        room.maxX - room.minX + 28, room.maxY - room.minY + 28,
+        14, '#e9e8db', '#d5d5c3', 1);
+    }
   }
 
   drawStageRooms(ctx) {
@@ -451,8 +461,8 @@ export class GameRenderer {
     ctx.save();
     ctx.setLineDash([6, 7]);
     const x = WORLD.doorway.centerX;
-    // A short orientation mark stays in the shared central doorway. It is
-    // not a trajectory, nor does its placement assume a former wall layout.
+    // A short orientation mark points across the empty road toward the
+    // aligned room doors. It is not a trajectory or a physical obstacle.
     const middle = (WORLD.corridor.minY + WORLD.corridor.maxY) / 2;
     const length = Math.min(48, WORLD.corridor.maxY - WORLD.corridor.minY - 14);
     const tipY = middle - length / 2, tailY = middle + length / 2;
@@ -634,7 +644,7 @@ export class GameRenderer {
     const debris = this.getAsset('wall_debris');
     if (debris) ctx.drawImage(debris, CENTER_X + 85, 650, 82, 82);
     text(ctx, 'Original PNGs · full furniture frames · uniform floor cover × 1.5', CENTER_X, HEIGHT - 71, 9, '#84735f', 700);
-    text(ctx, 'Compact rooms · one wall · removed colliders open the passage', CENTER_X, HEIGHT - 46, 8, '#84735f', 700);
+    text(ctx, 'Independent room frames · open road · one wall depth per entrance', CENTER_X, HEIGHT - 46, 8, '#84735f', 700);
     text(ctx, 'Vertical walls rotate their source lighting; no decorative frame overlay.', CENTER_X, HEIGHT - 21, 8, '#84735f', 700);
     ctx.restore();
   }
