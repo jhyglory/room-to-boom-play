@@ -38,8 +38,13 @@ export function expandedCameraView(previous=DEFAULT_VIEW, bodies=[]) {
     if(!bounds||!body.position||!Number.isFinite(body.position.x)||!Number.isFinite(body.position.y))continue;
     const angle=Number.isFinite(body.angle)?body.angle:0,c=Math.cos(angle),s=Math.sin(angle);
     for(const [x,y]of [[bounds.minX,bounds.minY],[bounds.maxX,bounds.minY],
-      [bounds.maxX,bounds.maxY],[bounds.minX,bounds.maxY]])
-      include({x:body.position.x+x*c-y*s,y:body.position.y+x*s+y*c});
+      [bounds.maxX,bounds.maxY],[bounds.minX,bounds.maxY]]) {
+      const shape=body.game?.deformation;
+      const deformed=shape&&[shape.a,shape.b,shape.c,shape.d].every(Number.isFinite)
+        ? {x:shape.a*x+shape.c*y,y:shape.b*x+shape.d*y} : {x,y};
+      include({x:body.position.x+deformed.x*c-deformed.y*s,
+        y:body.position.y+deformed.x*s+deformed.y*c});
+    }
   }
   return {minX:CENTER.x-halfWidth,maxX:CENTER.x+halfWidth,
     minY:CENTER.y-halfHeight,maxY:CENTER.y+halfHeight};

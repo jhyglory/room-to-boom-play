@@ -1,4 +1,4 @@
-import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.36.0';
+import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.37.0';
 
 // Aggregate views are derived reads; every completion keeps its original stage.
 export const ALL_STAGE=STAGE.endsWith('-qa')?'all-qa':'all';
@@ -6,6 +6,7 @@ export const ALL_BEST_KEY=`room-to-boom:best:${ALL_STAGE}`;
 
 export const RANKING_RULESETS = Object.freeze([
   {stage:STAGE,label:'Current',current:true},
+  {stage:'studio-room-space16-v36',label:'v0.36'},
   {stage:'studio-narrow-entries16-v34',label:'v0.34'},
   {stage:'studio-overlap80-16-v33',label:'v0.33'},
   {stage:'studio-room-entries16-v32',label:'v0.32'},
@@ -382,7 +383,7 @@ export class LeaderboardClient {
         saveBest(this.storage,value);cacheAllTimeBest(this.storage,value);
         this.deviceBest=previous===null?value:Math.min(previous,value);
         this.deviceAllTimeBest=allPrevious===null?value:Math.min(allPrevious,value);
-        return {...this.localBoard(value),isNewBest:previous===null||value<previous};
+        return {...this.localBoard(value),isNewBest:allPrevious===null||value<allPrevious};
       }
       return await this.sendPending(entry)||this.refreshBoard(value,STAGE);
     });

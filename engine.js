@@ -1,4 +1,6 @@
 /* Room to Boom! — deterministic, zero-gravity moving physics. */
+import { createFurnitureDeformation, nextFurnitureDeformation, deformFurniturePoint, CRUMPLE_LIMITS }
+  from './furniture-deformation.js?v=0.37.0';
 export const WORLD = Object.freeze({
   width: 520,
   height: 816,
@@ -241,6 +243,8 @@ export class MovingWorld {
     this._lastImpact = new Map();
     this._wallStrikes = new Map();
     this._breakthrough = new Map();
+    this._queuedDeformations = new Map();
+    this._lastDeformation = new Map();
     this.walls = [];
     this.bodies = FURNITURE.map((spec) => {
       const reference=REFERENCE_FURNITURE.find(item=>item.id===spec.id);
@@ -266,6 +270,13 @@ export class MovingWorld {
         maxLaunchEnergy: .5 * body.mass * Math.min(PHYSICS.speedCap, REFERENCE_LAUNCH.launchCap / spec.heavy ** REFERENCE_LAUNCH.weightExponent) ** 2,
         floorDamping: GLIDE_PROFILES[spec.id].floorDamping ?? FLOOR_DAMPING[spec.material], delivered: false, settled: 0,
         deliveryState: 'outside', deliveryProtrusion: 0, deliveryOverlap: 0, impact: 0 };
+      // Keep the registered sprite/template dimensions. The actual outline and
+      // image share the persistent local matrix; neither is stretched to a PNG
+      // frame or recreated as a different furniture identity.
+      body.game.originalW = spec.w; body.game.originalH = spec.h;
+      body.game.originalLocalVertices = Object.freeze(body.vertices.map(vertex =>
+        Object.freeze({ x: vertex.x - body.position.x, y: vertex.y - body.position.y })));
+      body.game.deformation = createFurnitureDeformation(spec.material);
       return body;
     });
 
@@ -364,8 +375,11 @@ export class MovingWorld {
     const slop = Number.isFinite(hitSlop) ? Math.max(0, hitSlop) : 12;
     const candidates = exact.length ? exact : this.bodies.filter((body) => {
       const p = Vector.rotate(Vector.sub(this.pointer, body.position), -body.angle);
-      return Math.abs(p.x) <= Math.max(body.game.w / 2 + slop, minimum / 2)
-        && Math.abs(p.y) <= Math.max(body.game.h / 2 + slop, minimum / 2);
+      const shape = this._localFurnitureVertices(body);
+      const halfWidth = Math.max(...shape.map(vertex => Math.abs(vertex.x)));
+      const halfHeight = Math.max(...shape.map(vertex => Math.abs(vertex.y)));
+      return Math.abs(p.x) <= Math.max(halfWidth + slop, minimum / 2)
+        && Math.abs(p.y) <= Math.max(halfHeight + slop, minimum / 2);
     });
     if (!candidates.length) return null;
     const outlineDistance = body => {
@@ -391,9 +405,16 @@ export class MovingWorld {
     this._breakthrough.delete(body);
     const local = Vector.rotate(Vector.sub(this.pointer, body.position), -body.angle);
     // Keep the grab anchor inside the physical body even for an expanded hit.
-    local.x = Math.max(-body.game.w / 2 + 3, Math.min(body.game.w / 2 - 3, local.x));
-    local.y = Math.max(-body.game.h / 2 + 3, Math.min(body.game.h / 2 - 3, local.y));
-    this.anchor = local;
+    // Invert the actual affine shape, inset the original rectangle, then map
+    // back. Expanded touch targets cannot grab empty pre-crumple space and
+    // acquire an oversized lever/extra launch energy.
+    const deformation = body.game.deformation;
+    const determinant = deformation.a * deformation.d - deformation.b * deformation.c;
+    const original = { x: (deformation.d * local.x - deformation.c * local.y) / determinant,
+      y: (-deformation.b * local.x + deformation.a * local.y) / determinant };
+    original.x = Math.max(-body.game.w / 2 + 3, Math.min(body.game.w / 2 - 3, original.x));
+    original.y = Math.max(-body.game.h / 2 + 3, Math.min(body.game.h / 2 - 3, original.y));
+    this.anchor = deformFurniturePoint(original, deformation);
     this.aimOrigin = { x, y };
     this.grabbed = body;
     // Aiming holds only the selected body. No pointer movement modifies its
@@ -491,6 +512,9 @@ export class MovingWorld {
     }
     try { Engine.update(this.engine, dt); }
     finally { for(const [body,air]of airOverrides)body.frictionAir=air; }
+    // Collision callbacks only queue intent. Rebuild the single convex shape
+    // after the solver has finished, before input/delivery observe its outline.
+    this._applyDeformations();
     for (const body of this.bodies) {
       const speed = Vector.magnitude(body.velocity);
       if (speed > MAX_SPEED) Body.setVelocity(body, Vector.mult(body.velocity, MAX_SPEED / speed));
@@ -545,6 +569,45 @@ export class MovingWorld {
     this._moved = this.bodies.reduce((count, body) => count + Number(body.game.delivered), 0);
     for (const body of newlyUndelivered) this.onUndeliver?.(body);
     for (const body of newlyDelivered) this.onDeliver?.(body);
+  }
+
+  _localFurnitureVertices(body) {
+    return body.game.originalLocalVertices.map(vertex =>
+      deformFurniturePoint(vertex, body.game.deformation));
+  }
+
+  _queueFurnitureDeformation(body, contact) {
+    if (!body?.game?.kind || body.isStatic || body === this.grabbed
+      || this.elapsedMs - (this._lastDeformation.get(body) ?? -Infinity) < CRUMPLE_LIMITS.bodyCooldownMs) return;
+    const normal = this.M.Vector.rotate(contact.normal, -body.angle);
+    const next = nextFurnitureDeformation(body.game.deformation, body.game.material, normal, contact);
+    if (!next) return;
+    const previous = this._queuedDeformations.get(body);
+    // Neighboring wall panels and onWallHit/onBreak describe one physical
+    // strike. Keep only its strongest measured contact, never sum the panels.
+    if (!previous || contact.energy > previous.energy)
+      this._queuedDeformations.set(body, { next, energy: contact.energy });
+  }
+
+  _applyDeformations() {
+    const { Body, Vector } = this.M;
+    for (const [body, { next }] of this._queuedDeformations) {
+      if (body.isStatic || body === this.grabbed) continue;
+      const mass = body.mass, velocity = Body.getVelocity(body), spin = Body.getAngularVelocity(body);
+      const vertices = body.game.originalLocalVertices.map(vertex =>
+        Vector.rotate(deformFurniturePoint(vertex, next), body.angle));
+      // Matter recomputes the convex axes, area, bounds and inertia. Put the
+      // same conserved mass back after changing the volume. Retaining spin
+      // with the smaller inertia dissipates energy instead of accelerating it.
+      Body.setVertices(body, vertices);
+      Body.setMass(body, mass);
+      Body.setVelocity(body, velocity);
+      Body.setAngularVelocity(body, spin);
+      body.game.deformation = next;
+      this._lastDeformation.set(body, this.elapsedMs);
+      this._clearBodyImpulses(body);
+    }
+    this._queuedDeformations.clear();
   }
 
   _breakthroughActive(body) {
@@ -619,6 +682,7 @@ export class MovingWorld {
       +lever*lever*body.inverseInertia+otherLever*otherLever*other.inverseInertia);
     return {point,normal,arm,otherArm,velocity,otherVelocity,relativeVelocity,relativeContactVelocity,
       angularVelocity,otherAngularVelocity,speed,lever,otherLever,effectiveMass,
+      bodyMass:body.mass,otherMass:other.mass,bodyInertia:body.inertia,otherInertia:other.inertia,
       energy:.5*effectiveMass*Math.max(0,speed)**2};
   }
 
@@ -666,6 +730,7 @@ export class MovingWorld {
     }
     strike.armed=false;strike.retreated=false;strike.at=this.elapsedMs;
     if(speed<.8)return null;
+    this._queueFurnitureDeformation(body, contact);
     const coupledEnergy=Math.min(energy,energyLimit);
     const reserve=.5*effectiveMass*PHYSICS.wallMinExitSpeed**2;
     const before=wall.game.health;
@@ -702,6 +767,7 @@ export class MovingWorld {
     const intensity=Math.min(1,Math.sqrt(energy/(wall.game.maxHealth*PHYSICS.wallEnergyPerHealth)));
     wall.game.impact=intensity;
     const info={point,normal,velocity:{...velocity},angularVelocity,contactArm:arm,
+      bodyMass:contact.bodyMass,otherMass:contact.otherMass,bodyInertia:contact.bodyInertia,otherInertia:contact.otherInertia,
       intensity,speed,energy,coupledEnergy,effectiveMass,damage,damageWork,remainingHealth:wall.game.health,
       resistanceScale,damageScale,damageEfficiency,workPerHealth,minimumImpactEnergy,intactEnergy,normalFraction,meaningful,
       firstCrack:!wasCracked&&damage>0,
@@ -771,6 +837,9 @@ export class MovingWorld {
       const key=`${Math.min(a.id,b.id)}:${Math.max(a.id,b.id)}`;
       if(this.elapsedMs-(this._lastImpact.get(key)??-Infinity)>90){
         this._lastImpact.set(key,this.elapsedMs);
+        this._queueFurnitureDeformation(moving,contact);
+        if(other.game?.kind)this._queueFurnitureDeformation(other,{...contact,
+          normal:Vector.neg(contact.normal),relativeContactVelocity:Vector.neg(contact.relativeContactVelocity)});
         this.onImpact?.(moving,speed,other,{...contact,contactArm:contact.arm,otherContactArm:contact.otherArm,
           speed,restitution,normalImpulse});
       }

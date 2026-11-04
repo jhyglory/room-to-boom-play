@@ -30,7 +30,18 @@ function contactLocal(body, info, normal) {
     && finite(body.position?.x) && finite(body.position?.y)
     ? { x: info.point.x - body.position.x, y: info.point.y - body.position.y } : null;
   const axis = localVector(normal, angle);
-  const local = arm ? localVector(arm, angle) : { x: -axis.x * w / 2, y: -axis.y * h / 2 };
+  let local = arm ? localVector(arm, angle) : { x: -axis.x * w / 2, y: -axis.y * h / 2 };
+  const shape = body.game?.deformation;
+  const determinant = shape && shape.a * shape.d - shape.b * shape.c;
+  if (shape && [shape.a, shape.b, shape.c, shape.d].every(finite) && determinant > 1e-6) {
+    // Contacts are measured on the already crumpled physical surface. Store
+    // traces in its original coordinates so later deformation carries them.
+    local = { x: (shape.d * local.x - shape.c * local.y) / determinant,
+      y: (-shape.b * local.x + shape.a * local.y) / determinant };
+    const nx = shape.a * axis.x + shape.b * axis.y;
+    const ny = shape.c * axis.x + shape.d * axis.y;
+    axis.x = nx; axis.y = ny;
+  }
   // A support point is on the physical edge. Move only the painted trace a few
   // units onto the surface, avoiding transparent PNG margins and loose pixels.
   const inset = Math.min(7, Math.min(w, h) * .14);
@@ -169,8 +180,12 @@ export class FurnitureImpacts {
   addWoodChips(body, mark, normal, strength) {
     if (!finite(body.position?.x) || !finite(body.position?.y)) return;
     const angle = finite(body.angle) ? body.angle : 0, c = Math.cos(angle), s = Math.sin(angle);
-    const x = body.position.x + mark.x * c - mark.y * s;
-    const y = body.position.y + mark.x * s + mark.y * c;
+    const shape = body.game?.deformation;
+    const local = shape && [shape.a, shape.b, shape.c, shape.d].every(finite)
+      ? { x: shape.a * mark.x + shape.c * mark.y, y: shape.b * mark.x + shape.d * mark.y }
+      : mark;
+    const x = body.position.x + local.x * c - local.y * s;
+    const y = body.position.y + local.x * s + local.y * c;
     const tangent = { x: -normal.y, y: normal.x };
     for (let i = 0; i < FURNITURE_DAMAGE_LIMITS.chipsPerHit; i++) {
       const spread = (i - 1) * .85, speed = (28 + i * 13) * (.65 + strength * .35);

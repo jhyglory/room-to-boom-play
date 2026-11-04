@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.36.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.37.0';
 
-// v36 enlarges both room interiors and shortens the road; preserve all earlier rule ledgers and identities.
-export const STAGE = 'studio-room-space16-v36';
+// v37 adds bounded physical crumpling; original ledgers and completion receipts remain intact.
+export const STAGE = 'studio-crumple16-v37';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

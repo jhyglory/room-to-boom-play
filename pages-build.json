@@ -1,5 +1,5 @@
 {
-  "version": "0.36.0",
+  "version": "0.37.0",
   "mode": "remote",
   "apiBase": "https://room-to-boom-rankings.jhyglory.chatgpt.site",
   "files": [
@@ -59,6 +59,7 @@
     "fonts/SOURCES.md",
     "fonts/fredoka-bold-latin.woff2",
     "fonts/nunito-latin-variable.woff2",
+    "furniture-deformation.js",
     "furniture-impact.js",
     "impact-burst.js",
     "impact-presentation.js",
@@ -72,7 +73,7 @@
     "vendor/MATTER-LICENSE.txt",
     "vendor/matter.min.js"
   ],
-  "runtimeBytes": 32806327,
+  "runtimeBytes": 32814372,
   "excluded": [
     "data",
     "server.py",

@@ -1,8 +1,8 @@
-import { WORLD } from './engine.js?v=0.36.0';
-import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.36.0';
+import { WORLD } from './engine.js?v=0.37.0';
+import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.37.0';
 import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.30.0';
 import { ImpactBursts } from './impact-burst.js?v=0.30.0';
-import { FurnitureImpacts } from './furniture-impact.js?v=0.36.0';
+import { FurnitureImpacts } from './furniture-impact.js?v=0.37.0';
 
 const WIDTH = WORLD.width;
 const HEIGHT = WORLD.height;
@@ -815,6 +815,14 @@ export class GameRenderer {
     const nearHome = body.position.y <= WORLD.delivery.maxY + h / 2 + 18;
     const outsideEdge = !g.delivered && g.deliveryState === 'outside' && nearHome && g.deliveryProtrusion > 0;
     ctx.save(); ctx.translate(body.position.x, body.position.y); ctx.rotate(body.angle || 0);
+    // Persistent crumpling shares the engine's body-local affine matrix. Apply
+    // it once to the registered PNG, selection and attached surface marks.
+    // Brief impact recovery remains a separate painted reaction below.
+    const shape = g.deformation;
+    if (shape && [shape.a, shape.b, shape.c, shape.d].every(Number.isFinite)
+      && shape.a * shape.d - shape.b * shape.c > 1e-6
+      && (shape.a !== 1 || shape.b !== 0 || shape.c !== 0 || shape.d !== 1))
+      ctx.transform(shape.a, shape.b, shape.c, shape.d, 0, 0);
     if (outsideEdge) rounded(ctx, -w / 2 - 4, -h / 2 - 4, w + 8, h + 8, 9, null, '#d4a143', 2.5);
     if (selected) {
       ctx.save(); ctx.shadowColor = '#71ffd4'; ctx.shadowBlur = 19;
