@@ -1,3 +1,5 @@
+import { createFurnitureDamageArtSpecs } from './furniture-damage-art.js?v=0.39.0';
+
 // V2 supplied PNG bytes are preserved under assets/v2. Registration below is
 // authored render metadata, registered to the shared v18 portrait colliders.
 // Full transparent source frames use uniform furniture scales; the vertical
@@ -710,7 +712,9 @@ const ENVIRONMENT_SPECS = {
     ]
   }
 };
-export const ASSET_SPECS = Object.freeze({ ...FURNITURE_SPECS, ...ENVIRONMENT_SPECS });
+const DAMAGE_SPECS = createFurnitureDamageArtSpecs(FURNITURE_SPECS);
+export const FURNITURE_DAMAGE_ASSET_IDS = Object.freeze(Object.keys(DAMAGE_SPECS));
+export const ASSET_SPECS = Object.freeze({ ...FURNITURE_SPECS, ...ENVIRONMENT_SPECS, ...DAMAGE_SPECS });
 
 export const WALL_RENDER = Object.freeze({
   opaqueHeight:26,

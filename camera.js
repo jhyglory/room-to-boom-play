@@ -1,4 +1,5 @@
-import { furnitureVisualBounds } from './assets.js?v=0.30.0';
+import { furnitureVisualBounds } from './assets.js?v=0.39.0';
+import { furnitureDamageArt } from './furniture-damage-art.js?v=0.39.0';
 
 // Presentation bounds for the shared compact rooms. Projection is uniform:
 // neither furniture artwork nor the physics map is stretched for a viewport.
@@ -34,7 +35,7 @@ export function expandedCameraView(previous=DEFAULT_VIEW, bodies=[]) {
   for(const body of bodies||[]) {
     if(!body)continue;
     for(const vertex of body.vertices||[])include(vertex);
-    const bounds=furnitureVisualBounds(body.game?.kind||body.game?.id,{alpha:16});
+    const bounds=furnitureVisualBounds(furnitureDamageArt(body).assetId,{alpha:16});
     if(!bounds||!body.position||!Number.isFinite(body.position.x)||!Number.isFinite(body.position.y))continue;
     const angle=Number.isFinite(body.angle)?body.angle:0,c=Math.cos(angle),s=Math.sin(angle);
     for(const [x,y]of [[bounds.minX,bounds.minY],[bounds.maxX,bounds.minY],

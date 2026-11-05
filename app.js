@@ -1,6 +1,6 @@
 import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.37.0';
-import { GameRenderer } from './render.js?v=0.37.0';
-import { WALL_RENDER } from './assets.js?v=0.30.0';
+import { GameRenderer } from './render.js?v=0.39.0';
+import { WALL_RENDER } from './assets.js?v=0.39.0';
 import { RunClock, formatSeconds } from './clock.js';
 import { saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.37.0';
 import { GameAudio } from './audio.js?v=0.38.0';

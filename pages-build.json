@@ -1,11 +1,17 @@
 {
-  "version": "0.38.0",
+  "version": "0.39.0",
   "mode": "remote",
   "apiBase": "https://room-to-boom-rankings.jhyglory.chatgpt.site",
   "files": [
     "app.js",
     "assets.js",
     "assets/brand/room-to-boom-golden-toy.png",
+    "assets/damage-v1/bookcase_oak/damage_heavy.png",
+    "assets/damage-v1/bookcase_oak/damage_medium.png",
+    "assets/damage-v1/fridge_blue/damage_heavy.png",
+    "assets/damage-v1/fridge_blue/damage_medium.png",
+    "assets/damage-v1/sofa_mint/damage_heavy.png",
+    "assets/damage-v1/sofa_mint/damage_medium.png",
     "assets/leaderboard/components/avatar_default.svg",
     "assets/leaderboard/components/badge_bronze.svg",
     "assets/leaderboard/components/badge_gold.svg",
@@ -59,6 +65,7 @@
     "fonts/SOURCES.md",
     "fonts/fredoka-bold-latin.woff2",
     "fonts/nunito-latin-variable.woff2",
+    "furniture-damage-art.js",
     "furniture-deformation.js",
     "furniture-impact.js",
     "impact-burst.js",
@@ -73,7 +80,7 @@
     "vendor/MATTER-LICENSE.txt",
     "vendor/matter.min.js"
   ],
-  "runtimeBytes": 32815076,
+  "runtimeBytes": 38708954,
   "excluded": [
     "data",
     "server.py",

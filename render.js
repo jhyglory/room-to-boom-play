@@ -1,6 +1,7 @@
 import { WORLD } from './engine.js?v=0.37.0';
-import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.37.0';
-import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.30.0';
+import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.39.0';
+import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.39.0';
+import { furnitureDamageArt } from './furniture-damage-art.js?v=0.39.0';
 import { ImpactBursts } from './impact-burst.js?v=0.30.0';
 import { FurnitureImpacts } from './furniture-impact.js?v=0.37.0';
 
@@ -811,13 +812,15 @@ export class GameRenderer {
   drawFurniture(ctx, body, selected, now) {
     const g = body.game;
     if (!g) return;
+    const damageArt = furnitureDamageArt(body);
     const w = g.w, h = g.h;
     const nearHome = body.position.y <= WORLD.delivery.maxY + h / 2 + 18;
     const outsideEdge = !g.delivered && g.deliveryState === 'outside' && nearHome && g.deliveryProtrusion > 0;
     ctx.save(); ctx.translate(body.position.x, body.position.y); ctx.rotate(body.angle || 0);
-    // Persistent crumpling shares the engine's body-local affine matrix. Apply
-    // it once to the registered PNG, selection and attached surface marks.
-    // Brief impact recovery remains a separate painted reaction below.
+    // State PNGs are registered to the same canonical floor footprint. The
+    // engine's persistent matrix is applied exactly once to that registered
+    // representation and its selection; no second damage-size multiplier is
+    // layered over the already folded artwork.
     const shape = g.deformation;
     if (shape && [shape.a, shape.b, shape.c, shape.d].every(Number.isFinite)
       && shape.a * shape.d - shape.b * shape.c > 1e-6
@@ -834,13 +837,19 @@ export class GameRenderer {
       { reducedMotion: this.reducedMotion, aiming: selected });
     ctx.save();
     if (deformation?.active) {
-      ctx.rotate(deformation.frameAngle || 0);
+      // A pre-folded damage PNG needs less transient squash than intact art.
+      // This painted recovery never changes the permanent physical matrix.
+      const reaction = damageArt.stage === 'normal' ? 1 : .45;
+      ctx.rotate((deformation.frameAngle || 0) * reaction);
       ctx.rotate(deformation.angle);
-      ctx.transform(deformation.scaleNormal, 0, deformation.shear, deformation.scaleTangent, 0, 0);
+      ctx.transform(1 + (deformation.scaleNormal - 1) * reaction, 0,
+        deformation.shear * reaction, 1 + (deformation.scaleTangent - 1) * reaction, 0, 0);
       ctx.rotate(-deformation.angle);
     }
-    this.drawRegisteredSprite(ctx, g.kind);
-    this.furnitureImpacts?.drawMarks(ctx, body);
+    this.drawRegisteredSprite(ctx, damageArt.assetId);
+    // Supplied damage already contains structural tears, dents and cracks.
+    // Preserve procedural wear on intact and the other thirteen sprites.
+    if (damageArt.stage === 'normal') this.furnitureImpacts?.drawMarks(ctx, body);
     ctx.restore();
     if (g.delivered) {
       ellipse(ctx, w / 2 - 3, -h / 2 + 2, 10, 10, '#e7f2d9', '#7aa17a', 1.8);
