@@ -1,8 +1,8 @@
-// Gesture-unlocked material percussion and staccato wall POPs for v18.1.
-// Fabric, wood, metal, cardboard and ceramic differ in resonance and decay;
-// small deterministic pitch cycles keep repeated hits tactile. v30.1 doubles
-// the master level while retaining the peak guard and authored cue envelopes.
-// No recorded audio or background music is used.
+// Gesture-unlocked material percussion and v38 dry wall crack clusters.
+// Real wall contacts lead with sub-millisecond broadband attacks, then short
+// separated noise syllables instead of the old pitched, bouncing POP tail.
+// Material furniture cues, the v30.1 master and peak guard are preserved.
+// Authored synthesis inspired by the reference feel; no recorded source audio.
 export const AUDIO_LEVELS = Object.freeze({
   masterGain: .9,
   maxVoices: 24,
@@ -308,15 +308,8 @@ export class GameAudio {
   noiseHit(duration, frequency, volume, q = 1, { delay = 0, toFrequency = null, filterType = 'bandpass', attack = 0 } = {}) {
     const context = this.context;
     if (this.voices.size >= AUDIO_LEVELS.maxVoices || !context.createBuffer || !context.createBufferSource || !context.createBiquadFilter) return false;
-    // One two-second white-noise source is cached per AudioContext. The gain
-    // envelope, not a baked fade or low-pass sweep, creates each short hit.
-    if (!this.noiseBuffer) {
-      this.noiseBuffer = context.createBuffer(1, Math.floor(context.sampleRate * 2), context.sampleRate);
-      const data = this.noiseBuffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    }
     const oscillator = context.createBufferSource();
-    oscillator.buffer = this.noiseBuffer;
+    oscillator.buffer = this.wallNoiseBuffer();
     if (oscillator.playbackRate) oscillator.playbackRate.value = 1;
     const gain = context.createGain();
     const filter = context.createBiquadFilter();
@@ -340,6 +333,17 @@ export class GameAudio {
     oscillator.start(start, Math.random() * 1.5);
     oscillator.stop(start + duration + .05);
     return true;
+  }
+
+  wallNoiseBuffer() {
+    // One reusable unwindowed source; each contact owns its short envelope.
+    if (!this.noiseBuffer) {
+      const context = this.context;
+      this.noiseBuffer = context.createBuffer(1, Math.floor(context.sampleRate * 2), context.sampleRate);
+      const data = this.noiseBuffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    }
+    return this.noiseBuffer;
   }
 
   materialContext({ material, kind, heavy } = {}) {
@@ -435,44 +439,51 @@ export class GameAudio {
   wallFlurry(k, weight, variant, { damaged=false, firstCrack=false, cadence=1 } = {}) {
     const beats = firstCrack || k >= .65 || (cadence >= 3 && k >= .3) ? 2
       : damaged || k >= .3 || (cadence >= 2 && k >= .15) ? 1 : 0;
-    if (!beats || this.voices.size >= AUDIO_LEVELS.maxVoices) return;
-    // One source, separate envelopes: audible ta-ta / pa-pa-PANG attacks,
-    // rather than several near-simultaneous layers heard as one thud.
-    const context=this.context, now=context.currentTime;
-    const oscillator=context.createOscillator(),gain=context.createGain();
-    const delays=beats===2?[.050,.112]:[.050];
-    const end=now+delays.at(-1)+.052;
-    const voice={oscillator,gain,start:now+delays[0],end,wallFlurry:true};
+    const context = this.context;
+    if (!beats || this.voices.size >= AUDIO_LEVELS.maxVoices
+      || !context.createBuffer || !context.createBufferSource || !context.createBiquadFilter) return;
+    // One noise voice, two silent-separated envelopes: TA-TAK, not a sliding
+    // triangle pitch or a continuous hiss. A new real contact still attacks now.
+    const now=context.currentTime, oscillator=context.createBufferSource();
+    const gain=context.createGain(),filter=context.createBiquadFilter();
+    const delays=beats===2?[.042,.086]:[.042],end=now+delays.at(-1)+.026;
+    const voice={oscillator,gain,filter,start:now+delays[0],end,wallFlurry:true};
     this.voices.add(voice);
-    oscillator.type='triangle';
+    oscillator.buffer=this.wallNoiseBuffer();
+    filter.type='highpass';filter.Q.setValueAtTime(.55,now);
     gain.gain.setValueAtTime(.0001,now);
-    const p=variant.pitch*(1.16-weight*.30)*(1+(cadence-1)*.035);
+    const brightness=variant.brightness*(1.10-weight*.20)*(1+(cadence-1)*.035);
     for(let i=0;i<delays.length;i++){
-      const start=now+delays[i],duration=i===1?.038:.028;
-      const level=(i===1?.20:.14)*(.55+k*.45)*AUDIO_LEVELS.cueGain.collision;
-      oscillator.frequency.setValueAtTime((i===1?560:790)*p,start);
-      oscillator.frequency.exponentialRampToValueAtTime((i===1?118:245)*p,start+duration);
+      const start=now+delays[i],duration=i===1?.020:.016;
+      const level=(i===1?.37:.30)*(.32+k*.68)*AUDIO_LEVELS.cueGain.collision;
+      filter.frequency.setValueAtTime((i===1?1000:1450)*brightness,start);
       gain.gain.setValueAtTime(.0001,start);
-      gain.gain.linearRampToValueAtTime(level,start+.0008);
+      gain.gain.linearRampToValueAtTime(level,start+.0005);
       gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+      // Hold near silence through the rest between syllables, without a new
+      // source, timer or contact callback that could survive Pause / Mute.
+      gain.gain.setValueAtTime(.0001,start+duration+.001);
     }
-    oscillator.onended=()=>{this.voices.delete(voice);try{oscillator.disconnect();gain.disconnect();}catch{}};
-    oscillator.connect(gain);gain.connect(this.master);
-    oscillator.start(voice.start);oscillator.stop(end);
+    oscillator.onended=()=>{this.voices.delete(voice);try{oscillator.disconnect();gain.disconnect();filter.disconnect();}catch{}};
+    oscillator.connect(filter);filter.connect(gain);gain.connect(this.master);
+    oscillator.start(voice.start,Math.random()*1.5);oscillator.stop(end);
   }
 
   wallPop(k, weight, variant, material, { damaged=false, firstCrack=false, broken=false, cadence=1 } = {}) {
-    const loud = (.46 + k * .54) * AUDIO_LEVELS.cueGain.collision;
-    const p = variant.pitch * (1.15 - weight * .30);
-    // The sharp falling pitch and small rebound carry the "POP". A compact
-    // low body supports it; the bright pressure click ends before any hiss.
-    this.popTone((465 + k * 175) * p, (90 + k * 24) * p, .066 + k * .022, .32 * loud, { bounce: true });
-    this.popTone((112 + k * 22) * p, 49 * p, .048 + k * .020, .18 * loud);
-    this.popTone((900 + k * 240) * p, 320 * p, .022 + k * .008, .085 * loud, { type:'triangle', attack:.0008 });
-    this.noiseHit(.011 + k * .006, 1250 * variant.brightness, .21 * loud, .7,
-      { filterType:'highpass', attack:.0008 });
+    const loud=(.27+k*.73)*AUDIO_LEVELS.cueGain.collision;
+    const p=variant.pitch*(1.15-weight*.30);
+    // A dry pressure crack leads. Low, very short body layers provide weight
+    // without the previous audible falling/rising "boing" or ringing note.
+    this.popTone((126+k*32)*p,73*p,.023+k*.011,.12*loud,{attack:.0005});
+    this.noiseHit(.013+k*.009,1450*variant.brightness,.40*loud,.55,
+      {filterType:'highpass',attack:.0005});
+    this.noiseHit(.018+k*.010,(780+k*170)*variant.brightness,.26*loud,.7,
+      {attack:.0007});
+    this.popTone((205+k*35)*p,94*p,.019+k*.008,.075*loud,
+      {type:'triangle',attack:.0005});
     if(firstCrack)this.crackTail(k,variant);
-    else if(damaged)this.popTone(1350*p,510*p,.024,.075*loud,{delay:.012,type:'triangle'});
+    else if(damaged)this.noiseHit(.015,2300*variant.brightness,.075*loud,.65,
+      {delay:.009,filterType:'highpass',attack:.0005});
     else this.materialAccent(material,variant,.14+k*.10);
     if(!broken)this.wallFlurry(k,weight,variant,{damaged,firstCrack,cadence});
   }
@@ -490,20 +501,23 @@ export class GameAudio {
 
   crackTail(k,variant) {
     const mix=AUDIO_LEVELS.cueGain.collision*(.75+k*.25),p=variant.pitch;
-    this.popTone(1350*p,380*p,.028,.14*mix,{type:'triangle',attack:.0007});
-    this.popTone(820*p,240*p,.031,.09*mix,{delay:.021,type:'triangle',attack:.0007});
-    this.noiseHit(.018,2400*variant.brightness,.115*mix,1.6,{delay:.009,attack:.0006});
+    this.noiseHit(.014,2100*variant.brightness,.17*mix,.6,
+      {filterType:'highpass',attack:.0005});
+    this.noiseHit(.016,1350*variant.brightness,.12*mix,.65,
+      {delay:.021,filterType:'highpass',attack:.0005});
+    this.popTone(170*p,87*p,.025,.07*mix,{attack:.0005});
   }
 
   collapseTail(variant) {
-    const mix = AUDIO_LEVELS.cueGain.collision;
-    this.popTone(385*variant.pitch,91,.080,.21*mix,{bounce:true});
-    this.popTone(620*variant.pitch,165,.032,.14*mix,{delay:.060,type:'triangle'});
-    this.popTone(275*variant.pitch,78,.050,.23*mix,{delay:.126,bounce:true});
-    this.noiseHit(.052,820*variant.brightness,.18*mix,1.2,
-      {delay:.006,toFrequency:1850,attack:.0008});
-    this.noiseHit(.023,2300*variant.brightness,.09*mix,1.1,
-      {delay:.132,filterType:'highpass',attack:.0008});
+    const mix=AUDIO_LEVELS.cueGain.collision,b=variant.brightness;
+    // PAP-PA-PAK: separate dry reports with a short low final body and grit.
+    // The first report coincides with collider removal; the two later reports
+    // are decoration only and share normal cancellation / voice retirement.
+    this.noiseHit(.022,1300*b,.36*mix,.55,{filterType:'highpass',attack:.0005});
+    this.noiseHit(.020,1100*b,.30*mix,.55,{delay:.041,filterType:'highpass',attack:.0005});
+    this.noiseHit(.026,900*b,.42*mix,.55,{delay:.086,filterType:'highpass',attack:.0005});
+    this.popTone(154*variant.pitch,65,.038,.12*mix,{delay:.086,attack:.0005});
+    this.noiseHit(.043,2300*b,.065*mix,.7,{delay:.114,attack:.0007});
   }
 
   collision(speed, metadata = {}) {
