@@ -1,13 +1,15 @@
-// Supplied damage-v1 PNGs are preserved byte-for-byte. These registrations
+import { FURNITURE_DAMAGE_EXTENSION_REGISTRATION } from './furniture-damage-registration.js?v=0.40.0';
+
+// Supplied damage PNGs are preserved byte-for-byte. These registrations
 // describe painted structural folds, not another accumulated physics shrink.
-// The invariant left foot stays in the original canonical ground frame; the
+// The invariant support anchor stays in the original canonical ground frame; the
 // renderer applies the existing physical deformation matrix exactly once.
 // No alpha bounding box, shadow or bent upper corner becomes a new collider.
 
-export const FURNITURE_DAMAGE_THRESHOLDS = Object.freeze({ medium: .20, heavy: .60 });
+export const FURNITURE_DAMAGE_THRESHOLDS = Object.freeze({ medium: .55, heavy: .95 });
 
 const freezePoint = point => Object.freeze({ x: point[0], y: point[1] });
-const REGISTRATION = Object.freeze({
+const INITIAL_REGISTRATION = Object.freeze({
   fridge: Object.freeze({
     folder: 'fridge_blue', normalFootAnchor: freezePoint([448.5, 1029]),
     medium: Object.freeze({
@@ -55,6 +57,8 @@ const REGISTRATION = Object.freeze({
   }),
 });
 
+const REGISTRATION = Object.freeze({ ...INITIAL_REGISTRATION, ...FURNITURE_DAMAGE_EXTENSION_REGISTRATION });
+
 export const FURNITURE_DAMAGE_ART_REGISTRATION = REGISTRATION;
 
 // Called after the common portrait scale has already been applied to the
@@ -67,29 +71,44 @@ export function createFurnitureDamageArtSpecs(normalSpecs = {}) {
     if (!normal?.pivot || !Number.isFinite(normal.scale) || normal.scale <= 0) continue;
     for (const stage of ['medium', 'heavy']) {
       const source = registration[stage];
+      const nativeWidth = source.nativeWidth ?? normal.width;
+      const nativeHeight = source.nativeHeight ?? normal.height;
+      if (!Number.isInteger(nativeWidth) || !Number.isInteger(nativeHeight)
+        || Math.abs(nativeWidth - normal.width) > 1 || Math.abs(nativeHeight - normal.height) > 1)
+        throw new RangeError(`Damage source exceeds its fixed logical canvas: ${kind}/${stage}`);
+      // A generated frame may differ by one native pixel. Registration is
+      // always in the unchanged normal logical frame, never alpha-auto-fit.
+      const sx = normal.width / nativeWidth, sy = normal.height / nativeHeight;
+      const footAnchor = Object.freeze({ x: source.footAnchor.x * sx, y: source.footAnchor.y * sy });
+      const logicalBounds = bounds => Object.freeze([bounds[0] * sx, bounds[1] * sy, bounds[2] * sx, bounds[3] * sy]);
       const delta = Object.freeze({
-        x: source.footAnchor.x - registration.normalFootAnchor.x,
-        y: source.footAnchor.y - registration.normalFootAnchor.y,
+        x: footAnchor.x - registration.normalFootAnchor.x,
+        y: footAnchor.y - registration.normalFootAnchor.y,
       });
       specs[`${kind}_damage_${stage}`] = Object.freeze({
         ...normal,
-        filename: `assets/damage-v1/${registration.folder}/damage_${stage}.png`,
+        filename: source.filename || `assets/damage-v1/${registration.folder}/damage_${stage}.png`,
         sourcePath: `assets/${registration.folder}/damage_${stage}.png`,
         sha256: source.sha256,
         pivot: Object.freeze({ x: normal.pivot.x + delta.x, y: normal.pivot.y + delta.y }),
         scale: normal.scale,
         body: Object.freeze({ ...normal.body }),
-        opaqueBounds: source.opaqueBounds,
-        alphaBounds: source.alphaBounds,
-        registration: 'authored-damage-left-foot-uniform',
-        registrationNote: 'Unchanged uniform canonical scale and invariant left-foot anchor; painted structural folds remain visible. No stage-dependent physics scale is added. Existing physical deformation is applied once by the renderer.',
+        nativeWidth, nativeHeight,
+        logicalCanvas: Object.freeze({ width: normal.width, height: normal.height }),
+        nativeOpaqueBounds: source.opaqueBounds,
+        nativeAlphaBounds: source.alphaBounds,
+        opaqueBounds: logicalBounds(source.opaqueBounds),
+        alphaBounds: logicalBounds(source.alphaBounds),
+        registration: 'authored-damage-ground-anchor-uniform',
+        registrationNote: 'Unchanged normal logical frame, uniform scale and invariant ground support; painted structural folds remain visible. No stage-dependent physics scale is added. Existing physical deformation is applied once by the renderer.',
         normalAssetId: kind,
         damageStage: stage,
         damageRegistration: Object.freeze({
           normalFootAnchor: registration.normalFootAnchor,
-          footAnchor: source.footAnchor,
+          footAnchor,
+          nativeFootAnchor: source.footAnchor,
           pivotDelta: delta,
-          anchorBasis: 'Opaque left-foot midpoint and foot-bottom baseline, measured separately from the shadow and bent opposite-side silhouette.',
+          anchorBasis: registration.registrationNotes || 'Opaque left-foot midpoint and foot-bottom baseline, measured separately from the shadow and bent opposite-side silhouette.',
         }),
       });
     }

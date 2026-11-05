@@ -1,5 +1,5 @@
-import { furnitureVisualBounds } from './assets.js?v=0.39.0';
-import { furnitureDamageArt } from './furniture-damage-art.js?v=0.39.0';
+import { furnitureVisualBounds } from './assets.js?v=0.40.0';
+import { furnitureDamageArt } from './furniture-damage-art.js?v=0.40.0';
 
 // Presentation bounds for the shared compact rooms. Projection is uniform:
 // neither furniture artwork nor the physics map is stretched for a viewport.

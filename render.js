@@ -1,7 +1,7 @@
 import { WORLD } from './engine.js?v=0.37.0';
-import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.39.0';
-import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.39.0';
-import { furnitureDamageArt } from './furniture-damage-art.js?v=0.39.0';
+import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.40.0';
+import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.40.0';
+import { furnitureDamageArt } from './furniture-damage-art.js?v=0.40.0';
 import { ImpactBursts } from './impact-burst.js?v=0.30.0';
 import { FurnitureImpacts } from './furniture-impact.js?v=0.37.0';
 

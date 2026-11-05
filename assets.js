@@ -1,4 +1,4 @@
-import { createFurnitureDamageArtSpecs } from './furniture-damage-art.js?v=0.39.0';
+import { createFurnitureDamageArtSpecs } from './furniture-damage-art.js?v=0.40.0';
 
 // V2 supplied PNG bytes are preserved under assets/v2. Registration below is
 // authored render metadata, registered to the shared v18 portrait colliders.
@@ -765,30 +765,152 @@ export function brokenWallPlacements({gapStart=-76,gapEnd=76,height=WALL_RENDER.
   }));
 }
 
-export function createAssetStore({ ImageClass = globalThis.Image } = {}) {
-  const images = new Map();
+// Damage sources retain their supplied PNGs and fixed logical registration.
+// Only their in-memory CanvasImageSource is downsampled, avoiding a full-size
+// decoded/GPU copy for each of the thirty-two state images on mobile.
+export const DAMAGE_TEXTURE_MAX_EDGE = 512;
+export const DAMAGE_DECODE_CONCURRENCY = 2;
+
+function damageTextureSize(width, height) {
+  const factor = Math.min(1, DAMAGE_TEXTURE_MAX_EDGE / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * factor)),
+    height: Math.max(1, Math.round(height * factor)) };
+}
+
+async function defaultDamageTexture(image, size) {
+  let bitmapError = null;
+  if (typeof globalThis.createImageBitmap === 'function') {
+    try {
+      const bitmap = await globalThis.createImageBitmap(image, {
+        resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'high',
+      });
+      if (bitmap.width === size.width && bitmap.height === size.height) return bitmap;
+      try { bitmap.close?.(); } catch {}
+      bitmapError = new Error('The browser ignored damage texture resize dimensions.');
+    } catch (error) { bitmapError = error; }
+  }
+  if (typeof globalThis.document?.createElement === 'function') {
+    const canvas = globalThis.document.createElement('canvas');
+    canvas.width = size.width; canvas.height = size.height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not create the damage texture canvas.');
+    context.imageSmoothingEnabled = true; context.imageSmoothingQuality = 'high';
+    context.drawImage(image, 0, 0, size.width, size.height);
+    return canvas;
+  }
+  if (bitmapError) throw bitmapError;
+  // Node/headless image fixtures have no CanvasImageSource factory. Their
+  // original-size source is explicitly reported rather than claiming a cache.
+  return image;
+}
+
+function releaseImageSource(image) {
+  if (!image) return;
+  image.onload = image.onerror = null;
+  try { image.src = ''; } catch {}
+}
+function releaseTexture(texture) {
+  if (!texture) return;
+  try {
+    if (typeof texture.close === 'function') texture.close();
+    else if (typeof texture.getContext === 'function') texture.width = texture.height = 0;
+    else releaseImageSource(texture);
+  } catch {}
+}
+
+export function createAssetStore({ ImageClass = globalThis.Image,
+  textureFactory = defaultDamageTexture } = {}) {
+  const images = new Map(), textureInfo = new Map(), pendingSources = new Map();
+  let failure = null, activeDamageSources = 0, peakDamageSources = 0;
   const store = { status: ImageClass ? 'loading' : 'unavailable', error: null, version: 0,
     get: id => images.get(id) || null,
+    getTextureInfo: id => textureInfo.get(id) || null,
     get loadedCount() { return images.size; },
     get isReady() { return this.status === 'ready'; },
+    get textureStats() {
+      const items = [...textureInfo.values()], damage = items.filter(item => item.damage);
+      return Object.freeze({ cachedImages: items.length, damageImages: damage.length,
+        damageSourceRgbaBytesEstimate: damage.reduce((n,item) => n + item.nativeWidth * item.nativeHeight * 4, 0),
+        damageCachedRgbaBytesEstimate: damage.reduce((n,item) => n + item.rgbaBytesEstimate, 0),
+        totalCachedRgbaBytesEstimate: items.reduce((n,item) => n + item.rgbaBytesEstimate, 0),
+        resizedDamageImages: damage.filter(item => item.mode === 'resized').length,
+        headlessOriginalDamageImages: damage.filter(item => item.mode === 'headless-original').length,
+        activeDamageSources, peakDamageSources,
+        maxDamageEdge: DAMAGE_TEXTURE_MAX_EDGE, damageDecodeConcurrency: DAMAGE_DECODE_CONCURRENCY });
+    },
   };
   if (!ImageClass) { store.ready = Promise.resolve(store); return store; }
-  store.ready = Promise.all(Object.entries(ASSET_SPECS).map(([id, spec]) => new Promise((resolve, reject) => {
-    const image = new ImageClass();
-    image.decoding = 'async';
-    image.onload = async () => {
-      try {
-        if (typeof image.decode === 'function') await image.decode();
-        if (image.naturalWidth !== spec.width || image.naturalHeight !== spec.height)
-          throw new Error(`Unexpected image dimensions: ${spec.filename}`);
-        images.set(id, image);
-        resolve();
-      } catch (error) { reject(error); }
-    };
-    image.onerror = () => reject(new Error(`Could not load ${spec.filename}`));
-    image.src = new URL(spec.filename, import.meta.url).href;
-  }))).then(() => { store.status = 'ready'; store.version += 1; return store; }, error => {
-    store.status = 'error'; store.error = error; throw error;
+
+  async function loadOne([id, spec]) {
+    if (failure) throw failure;
+    const damage = Boolean(spec.damageStage);
+    let image = null, texture = null;
+    if (damage) { activeDamageSources++; peakDamageSources = Math.max(peakDamageSources, activeDamageSources); }
+    try {
+      image = await new Promise((resolve, reject) => {
+        const candidate = new ImageClass(); image = candidate;
+        pendingSources.set(candidate, reject);
+        candidate.decoding = 'async';
+        candidate.onload = async () => {
+          try {
+            if (typeof candidate.decode === 'function') await candidate.decode();
+            const nativeWidth = spec.nativeWidth ?? spec.width;
+            const nativeHeight = spec.nativeHeight ?? spec.height;
+            if (candidate.naturalWidth !== nativeWidth || candidate.naturalHeight !== nativeHeight)
+              throw new Error(`Unexpected image dimensions: ${spec.filename}`);
+            if (failure) throw failure;
+            resolve(candidate);
+          } catch (error) { reject(error); }
+        };
+        candidate.onerror = () => reject(new Error(`Could not load ${spec.filename}`));
+        candidate.src = new URL(spec.filename, import.meta.url).href;
+      });
+      const nativeWidth = image.naturalWidth, nativeHeight = image.naturalHeight;
+      const target = damageTextureSize(nativeWidth, nativeHeight);
+      texture = damage ? await textureFactory(image, Object.freeze({ ...target, id, spec,
+        maxEdge: DAMAGE_TEXTURE_MAX_EDGE })) : image;
+      if (!texture) throw new Error(`Could not create image texture: ${spec.filename}`);
+      const width = texture.width || texture.naturalWidth, height = texture.height || texture.naturalHeight;
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0)
+        throw new Error(`Invalid image texture dimensions: ${spec.filename}`);
+      if (damage && texture !== image
+        && (width !== target.width || height !== target.height || Math.max(width,height) > DAMAGE_TEXTURE_MAX_EDGE))
+        throw new Error(`Unexpected damage texture dimensions: ${spec.filename}`);
+      if (failure) throw failure;
+      images.set(id, texture);
+      textureInfo.set(id, Object.freeze({ id, damage, logicalWidth: spec.width, logicalHeight: spec.height,
+        nativeWidth, nativeHeight, width, height, rgbaBytesEstimate: width * height * 4,
+        mode: !damage ? 'original' : texture === image ? 'headless-original' : 'resized' }));
+      pendingSources.delete(image);
+      if (texture !== image) releaseImageSource(image);
+      else image.onload = image.onerror = null;
+    } catch (error) {
+      pendingSources.delete(image);
+      if (texture && texture !== image) releaseTexture(texture);
+      releaseImageSource(image);
+      throw error;
+    } finally { if (damage) activeDamageSources--; }
+  }
+
+  const entries = Object.entries(ASSET_SPECS);
+  const originals = entries.filter(([,spec]) => !spec.damageStage);
+  const damage = entries.filter(([,spec]) => spec.damageStage);
+  let nextDamage = 0;
+  async function damageWorker() {
+    while (!failure && nextDamage < damage.length) await loadOne(damage[nextDamage++]);
+  }
+  store.ready = Promise.all([
+    ...originals.map(loadOne),
+    ...Array.from({ length: Math.min(DAMAGE_DECODE_CONCURRENCY, damage.length) }, damageWorker),
+  ]).then(() => {
+    store.status = 'ready'; store.version += 1; return store;
+  }, error => {
+    failure = error; store.status = 'error'; store.error = error;
+    for (const [image, reject] of pendingSources) { releaseImageSource(image); reject(error); }
+    pendingSources.clear();
+    for (const image of images.values()) releaseTexture(image);
+    images.clear(); textureInfo.clear();
+    throw error;
   });
   // Rendering may be constructed before the app attaches its visible error UI.
   // Keep the original rejecting promise available to the app's awaited loader.
