@@ -3,9 +3,9 @@ import { GameRenderer } from './render.js?v=0.41.0';
 import { WALL_RENDER } from './assets.js?v=0.40.0';
 import { RunClock, formatSeconds } from './clock.js';
 import { saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.41.1';
-import { GameAudio } from './audio.js?v=0.38.0';
+import { GameAudio } from './audio.js?v=0.42.0';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, ALL_STAGE, readAllTimeBest, cacheAllTimeBest } from './leaderboard.js?v=0.41.1';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, ALL_STAGE, readAllTimeBest, cacheAllTimeBest } from './leaderboard.js?v=0.42.0';
 import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.30.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -14,6 +14,17 @@ function saveSetting(key,value){try{storage()?.setItem(key,value);}catch{}}
 
 const DELIVERY_PERCENT = Math.round(DELIVERY_OVERLAP_REQUIRED * 100);
 const $ = id => document.getElementById(id);
+const leaderboard = new LeaderboardClient({storage:storage(),fetch:window.fetch?.bind(window),serverEnabled:LEADERBOARD_MODE!=='device',apiBase:LEADERBOARD_API_BASE,timeoutMs:LEADERBOARD_API_BASE?8000:2500});
+// Read rankings alongside the artwork, not after a player opens the panel.
+// A first-time read stays public and never creates a profile or a finish.
+const publicWarmup = LEADERBOARD_API_BASE && !leaderboard.token
+  && !leaderboard.invalidStoredCredential && !leaderboard.pendingCount && !leaderboard.pendingRemoteNickname;
+let initialRankingRead = leaderboard.serverEnabled && !leaderboard.pendingCount
+  ? (publicWarmup ? leaderboard.publicBoard(ALL_STAGE,{identityWarning:false}) : leaderboard.refresh(null,{stage:ALL_STAGE,retryPending:false}))
+  : null;
+if(initialRankingRead)initialRankingRead=initialRankingRead.catch(()=>({
+  ...(leaderboard.getCachedBoard({stage:ALL_STAGE}) || leaderboard.localBoard(null,{stage:ALL_STAGE})),syncError:true,
+}));
 const canvas = $('game');
 const world = new MovingWorld();
 const renderer = new GameRenderer(canvas, world);
@@ -50,7 +61,6 @@ let phase = 'menu';
 let reducedMotion = readSetting('room-to-boom:motion') === 'true' || (readSetting('room-to-boom:motion') !== 'false' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 let muted = readSetting('room-to-boom:muted') === 'true';
 const audio = new GameAudio({muted,onStateChange:updateSound});
-const leaderboard = new LeaderboardClient({storage:storage(),fetch:window.fetch?.bind(window),serverEnabled:LEADERBOARD_MODE!=='device',apiBase:LEADERBOARD_API_BASE,timeoutMs:LEADERBOARD_API_BASE?8000:2500});
 let best = readAllTimeBest(storage());
 const pageUrl = window.location?.href || 'https://room-to-boom.tart-gecko-8925.chatgpt.site/';
 const challenge = parseChallenge(pageUrl);
@@ -270,7 +280,16 @@ function paintPendingRecords(){
 function paintRankingControls(){
   $('result-refresh').disabled=leaderboardSyncing||nicknameSaving;
   $('result-refresh').setAttribute('aria-busy',String(leaderboardSyncing));
+  $('result-board').setAttribute('aria-busy',String(leaderboardSyncing));
   $('result-refresh').textContent=leaderboardSyncing?'Loading…':'Refresh rankings';
+}
+function initialRankingBoard(seconds=null){
+  return leaderboard.getCachedBoard({stage:ALL_STAGE}) || leaderboard.localBoard(seconds,{stage:ALL_STAGE});
+}
+function keepSavedSharedBoard(board){
+  if(board.scope==='server'||!board.syncError)return board;
+  const cached=leaderboard.getCachedBoard({stage:ALL_STAGE});
+  return cached?{...cached,syncError:true,submissionPending:board.submissionPending}:board;
 }
 function paintLeaderboard(board){
   resultBoard=board;
@@ -295,7 +314,7 @@ function paintLeaderboard(board){
   $('result-my-time').textContent=board.me?`${board.me.seconds.toFixed(2)}s`:'—';
   $('ranking-scope-note').textContent='';
   $('ranking-scope-note').hidden=true;
-  const notice=waiting?`${!shared&&board.syncError?'Offline. ':''}${waiting} finished ${waiting===1?'run is':'runs are'} waiting to sync. Reconnect or refresh to retry.`:shared?(board.submissionPending?'Upload not confirmed. Refresh to retry.':board.identityWarning?'Shared rankings loaded. Your profile could not be confirmed; try refreshing.':'')
+  const notice=waiting?`${!shared&&board.syncError?'Offline. ':''}${waiting} finished ${waiting===1?'run is':'runs are'} waiting to sync. Reconnect or refresh to retry.`:shared?(board.submissionPending?'Upload not confirmed. Refresh to retry.':board.identityWarning?'Shared rankings loaded. Your profile could not be confirmed; try refreshing.':board.cached?(board.syncError?'Offline. Showing saved rankings. Refresh to retry.':'Saved rankings · updating…'):'')
     :board.syncError?'Offline. Showing your saved record on this device.':'Records are saved in this browser only. A shared leaderboard is not connected.';
   $('result-sync-state').textContent=notice;
   $('result-load-state').textContent=notice;
@@ -320,13 +339,13 @@ function paintCompletionRecord(){
   $('result-personal-best').hidden=!completed||isNewBest||best===null;
   setNewBestBadge(isNewBest&&(!leaderboard.serverEnabled||!leaderboardSyncing&&!pendingSubmission));
 }
-async function refreshRankings({submitPending=false}={}){
+async function refreshRankings({submitPending=false,force=false}={}){
   if(!isRankingScreen()||nicknameSaving)return;
   const version=runVersion;
   if(rankingInFlight?.version===version)return rankingInFlight.promise;
   const request=++rankingRequest;
   leaderboardSyncing=true;paintNickname();paintRankingControls();paintCompletionRecord();
-  $('result-load-state').textContent='Loading rankings…';
+  $('result-load-state').textContent=resultBoard?.scope==='server'?'Updating rankings…':'Loading rankings…';
   const task=(async()=>{
     let submitted=null;
     if(phase==='complete'&&pendingSubmission&&(submitPending||resultSubmissionId)){
@@ -338,7 +357,9 @@ async function refreshRankings({submitPending=false}={}){
     }
     // Keep each immutable completion under its actual rules, then read one
     // best per stable player identity across every production ruleset.
-    const board=await leaderboard.refresh(resultSeconds,{stage:ALL_STAGE});
+    const warmed=!force&&phase==='rankings'&&!pendingSubmission?initialRankingRead:null;
+    initialRankingRead=null;
+    const board=keepSavedSharedBoard(warmed?await warmed:await leaderboard.refresh(resultSeconds,{stage:ALL_STAGE,force:true,retryPending:false}));
     if(version!==runVersion||request!==rankingRequest||!isRankingScreen())return;
     leaderboardSyncing=false;
     paintLeaderboard(pendingSubmission&&board.scope==='server'?{...board,submissionPending:true}:board);
@@ -361,7 +382,7 @@ function recoverPendingRankings({refresh=false}={}){
   if(!leaderboard.serverEnabled||document.hidden||nicknameSaving)return Promise.resolve();
   if(pendingRecovery)return pendingRecovery;
   const queued=paintPendingRecords();
-  if(!queued)return refresh&&isRankingScreen()?refreshRankings():Promise.resolve();
+  if(!queued)return refresh&&isRankingScreen()?refreshRankings({force:true}):Promise.resolve();
   const task=(async()=>{
     const recovered=await leaderboard.flushPending({force:true});
     // A recovered receipt can confirm an all-time tie rather than a new best.
@@ -406,10 +427,11 @@ async function openRankings(){
   nicknameEditing=false;nicknameSaving=false;leaderboardSyncing=false;
   $('result-name-status').textContent='';setNewBestBadge(false);
   $('challenge-result').hidden=true;
-  paintLeaderboard(leaderboard.localBoard(null,{stage:ALL_STAGE}));
+  const forceFresh=initialRankingRead===null;
+  paintLeaderboard(initialRankingBoard());
   showPhase();$('result-main').focus();
   // Browsing never starts the clock or uploads an old device-local best.
-  await refreshRankings();
+  await refreshRankings({force:forceFresh});
 }
 function goMain(){
   clearResult();audio.cancelPending();release();world.reset();diagnosticImpacts.length=0;clock.reset();
@@ -448,7 +470,8 @@ function finish(){
   nicknameEditing=false;nicknameSaving=false;leaderboardSyncing=false;
   $('result-nickname').value=leaderboard.hasNickname?leaderboard.nickname:'';
   $('result-name-status').textContent='';
-  paintLeaderboard(leaderboard.localBoard(best,{stage:ALL_STAGE}));
+  initialRankingRead=null;
+  paintLeaderboard(initialRankingBoard(best));
   void syncLeaderboard();
   $('live-hint').textContent='All home. Ready for another run?';
   announce(`Move complete in ${formatSeconds(result)} seconds.`);

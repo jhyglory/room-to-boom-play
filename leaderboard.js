@@ -3,6 +3,7 @@ import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.41
 // Aggregate views are derived reads; every completion keeps its original stage.
 export const ALL_STAGE=STAGE.endsWith('-qa')?'all-qa':'all';
 export const ALL_BEST_KEY=`room-to-boom:best:${ALL_STAGE}`;
+export const RANKING_CACHE_MAX_AGE_MS=24*60*60*1000;
 
 export const RANKING_RULESETS = Object.freeze([
   {stage:STAGE,label:'Current',current:true},
@@ -103,6 +104,16 @@ export function validateBoard(value, expectedStage = STAGE) {
   return {...value,top:top.map(entry=>({...entry,isMe:entry.playerId===me?.playerId})),me,persisted:value.persisted===true};
 }
 
+// A disk snapshot contains only ranking data that is already public. Even a
+// malformed local cache cannot introduce credentials or receipt flags to UI.
+function cleanBoardSnapshot(board,owner,nickname=board.nickname){
+  const row=entry=>entry?{playerId:entry.playerId,nickname:entry.nickname,seconds:entry.seconds,
+    rank:entry.rank,position:entry.position,tied:entry.tied}:null;
+  return validateBoard({scope:'server',stage:board.stage,total:board.total,top:board.top.map(row),
+    me:owner?row(board.me):null,persisted:board.persisted===true,
+    ...(owner?{playerId:owner,nickname:cleanNickname(nickname)}:{identityWarning:board.identityWarning===true})},board.stage);
+}
+
 export class LeaderboardClient {
   constructor({storage,fetch:fetcher,timeoutMs=2500,serverEnabled=true,apiBase='',locks=globalThis.navigator?.locks}={}) {
     this.storage=storage;this.fetcher=fetcher;this.timeoutMs=timeoutMs;this.serverEnabled=serverEnabled;
@@ -115,7 +126,7 @@ export class LeaderboardClient {
     this.pendingRemoteNickname=pendingName?cleanNickname(pendingName):null;
     if(pendingName&&this.pendingRemoteNickname!==pendingName)this.write(this.pendingNameKey,this.pendingRemoteNickname);
     const savedToken=this.tokenKey?this.read(this.tokenKey):null;
-    this.token=validToken(savedToken)?savedToken:null;
+    this.token=validToken(savedToken)?savedToken:null;this.volatileCredential=false;
     this.invalidStoredCredential=!!savedToken&&!validToken(savedToken);
     const savedPlayer=this.read(this.playerKey);
     this.playerId=savedPlayer||makeSubmissionId();this.write(this.playerKey,this.playerId);
@@ -127,19 +138,78 @@ export class LeaderboardClient {
     this.hasNickname=this.read('room-to-boom:nickname-set')==='true'||!!savedName&&!['Player','플레이어'].includes(this.nickname);
     this.pending=Promise.resolve();this.profile=null;this.profilePromise=null;this.submissions=new Map();
     this.deviceBest=null;this.deviceAllTimeBest=null;
+    this.boardCache=new Map();this.boardCacheEpoch=0;this.refreshPromises=new Map();
   }
   read(key){try{return this.storage?.getItem(key);}catch{return null;}}
   write(key,value){try{this.storage?.setItem(key,value);return !!this.storage;}catch{return false;}}
-  setNickname(value){this.nickname=cleanNickname(value);this.hasNickname=true;this.write(NAME_KEY,this.nickname);this.write('room-to-boom:nickname-set','true');return this.nickname;}
+  cacheIdentity(){
+    this.reloadRemoteIdentity();
+    return this.apiBase?(this.token&&!this.invalidStoredCredential?this.confirmedPlayerId:null):this.playerId;
+  }
+  cachePrefix(owner){return `room-to-boom:ranking-cache:v1:${encodeURIComponent(this.apiBase||'cookie')}:${encodeURIComponent(owner||'public')}:`;}
+  removeBoardCache(key){
+    this.boardCache.delete(key);
+    try{if(typeof this.storage?.removeItem==='function')this.storage.removeItem(key);else this.storage?.setItem(key,'');}catch{}
+  }
+  invalidateBoardCache({bump=false}={}){
+    if(bump)this.boardCacheEpoch++;
+    const owner=this.cacheIdentity(),prefixes=[this.cachePrefix(null),...(owner?[this.cachePrefix(owner)]:[])];
+    const keys=new Set(this.boardCache.keys());
+    try{for(let i=0;i<this.storage.length;i++)keys.add(this.storage.key(i));}catch{}
+    for(const key of keys)if(typeof key==='string'&&prefixes.some(prefix=>key.startsWith(prefix)))this.removeBoardCache(key);
+  }
+  cacheBoard(board,{anonymous=false,epoch=this.boardCacheEpoch}={}){
+    if(!this.serverEnabled||epoch!==this.boardCacheEpoch||board.scope!=='server')return;
+    const owner=anonymous?null:this.cacheIdentity();
+    if(!anonymous&&!owner||epoch!==this.boardCacheEpoch)return;
+    if(!anonymous&&board.playerId&&board.playerId!==owner)return;
+    // Persist only public ranking fields, never proofs, submission receipts or
+    // transient synchronization/new-best flags from a write acknowledgment.
+    try{
+      rankingStage(board.stage);
+      const checked=cleanBoardSnapshot(board,owner,board.nickname??this.nickname),savedAt=Date.now();
+      const value={schema:1,apiBase:this.apiBase,owner,stage:board.stage,savedAt,board:checked};
+      const key=this.cachePrefix(owner)+encodeURIComponent(board.stage);
+      this.boardCache.set(key,value);this.write(key,JSON.stringify(value));
+    }catch{/* Invalid network shapes never become a stored ranking. */}
+  }
+  getCachedBoard({stage=ALL_STAGE}={}){
+    rankingStage(stage);if(!this.serverEnabled)return null;
+    const owner=this.cacheIdentity(),owners=owner?[owner,null]:[null],now=Date.now();
+    for(const candidate of owners){
+      const key=this.cachePrefix(candidate)+encodeURIComponent(stage);
+      try{
+        const value=this.boardCache.get(key)||JSON.parse(this.read(key));
+        if(!value)continue;
+        if(value.schema!==1||value.apiBase!==this.apiBase||value.owner!==candidate||value.stage!==stage
+          ||!Number.isFinite(value.savedAt)||value.savedAt>now+1000||now-value.savedAt>RANKING_CACHE_MAX_AGE_MS)
+          throw new Error('Expired or mismatched ranking snapshot');
+        const board=validateBoard(value.board,stage);
+        if(candidate?(board.playerId!==candidate||board.me&&board.me.playerId!==candidate):(board.playerId||board.me))
+          throw new Error('Mismatched snapshot owner');
+        const clean=cleanBoardSnapshot(board,candidate);
+        this.boardCache.set(key,{...value,board:clean});
+        // Callers explicitly present this as the last received shared ranking
+        // while a fresh read runs. Never pass a snapshot off as a fresh reply.
+        return {...JSON.parse(JSON.stringify(clean)),...(!candidate&&this.invalidStoredCredential?{identityWarning:true}:{}),cached:true,cachedAt:value.savedAt,stale:true};
+      }catch{this.removeBoardCache(key);}
+    }
+    return null;
+  }
+  setNickname(value){
+    const name=cleanNickname(value);if(name!==this.nickname)this.invalidateBoardCache({bump:true});
+    this.nickname=name;this.hasNickname=true;this.write(NAME_KEY,this.nickname);this.write('room-to-boom:nickname-set','true');return this.nickname;
+  }
   adoptProfile(profile){
     if(!profile||profile.scope!=='server'||typeof profile.playerId!=='string'||!profile.playerId||typeof profile.nickname!=='string')throw new Error('Invalid profile');
     if(this.apiBase){
       if(profile.token!==undefined){
         if(!validToken(profile.token))throw new Error('Invalid profile credential');
-        this.token=profile.token;this.write(this.tokenKey,this.token);
+        this.token=profile.token;this.volatileCredential=!this.write(this.tokenKey,this.token);
       }
       if(!this.token)throw new Error('Missing profile credential');
     }
+    if(this.confirmedPlayerId&&(this.confirmedPlayerId!==profile.playerId||this.nickname!==cleanNickname(profile.nickname)))this.invalidateBoardCache();
     this.playerId=profile.playerId;this.confirmedPlayerId=profile.playerId;this.write(this.playerKey,this.playerId);
     this.nickname=cleanNickname(profile.nickname);this.write(NAME_KEY,this.nickname);
     if(!['Player','플레이어'].includes(this.nickname)){this.hasNickname=true;this.write('room-to-boom:nickname-set','true');}
@@ -148,20 +218,36 @@ export class LeaderboardClient {
     const {token,...publicProfile}=profile;
     this.profile={...publicProfile,nickname:this.nickname};return this.profile;
   }
-  adoptBoard(board){
+  adoptBoard(board,{cacheEpoch=this.boardCacheEpoch}={}){
     if(board.playerId)this.adoptProfile({scope:'server',playerId:board.playerId,nickname:board.nickname??board.me?.nickname??this.nickname});
     else if(board.me)this.adoptProfile({scope:'server',playerId:board.me.playerId,nickname:board.me.nickname});
     const {token,...publicBoard}=board;
     if(board.stage===ALL_STAGE&&board.me)cacheAllTimeBest(this.storage,board.me.seconds);
+    this.cacheBoard(publicBoard,{epoch:cacheEpoch});
     return publicBoard;
   }
   enqueue(action){const pending=this.pending.then(action,action);this.pending=pending.catch(()=>{});return pending;}
   reloadRemoteIdentity(){
-    if(!this.apiBase)return;
-    const token=this.read(this.tokenKey);
-    this.invalidStoredCredential=!!token&&!validToken(token);
-    if(validToken(token)&&token!==this.token){
-      this.token=token;this.profile=null;
+    if(!this.apiBase||typeof this.storage?.getItem!=='function')return;
+    let token;
+    try{token=this.storage.getItem(this.tokenKey);}catch{return;}
+    // An inaccessible store is not evidence that a valid session proof was
+    // removed. If a newly issued proof could not be saved, keep that explicitly
+    // volatile session usable; malformed stored proof still overrides it.
+    if(token===null&&this.volatileCredential)return;
+    if(!validToken(token)){
+      const unusable=!!token||!!this.token||!!this.confirmedPlayerId||this.invalidStoredCredential;
+      if(this.token||this.profile||this.confirmedPlayerId||unusable!==this.invalidStoredCredential){
+        if(this.boardCacheEpoch!==undefined)this.boardCacheEpoch++;
+      }
+      this.invalidStoredCredential=unusable;
+      this.token=null;this.profile=null;this.confirmedPlayerId=null;this.volatileCredential=false;
+      return;
+    }
+    this.invalidStoredCredential=false;
+    if(token!==this.token){
+      if(this.boardCacheEpoch!==undefined)this.boardCacheEpoch++;
+      this.token=token;this.profile=null;this.volatileCredential=false;
       this.playerId=this.read(this.playerKey)||this.playerId;this.confirmedPlayerId=this.read(this.playerKey)||null;
     }
   }
@@ -237,8 +323,11 @@ export class LeaderboardClient {
     // A failed personal proof must not hide everybody else's public records.
     // Keep that proof unchanged: only an explicit authenticated operation can
     // identify this browser, and this read must never mint another player.
+    const epoch=this.boardCacheEpoch;
     const board=validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`,{}, {anonymous:true}),stage);
-    return {...board,identityWarning:true,...extra};
+    const result={...board,identityWarning:true,...extra};
+    this.cacheBoard(result,{anonymous:true,epoch});
+    return result;
   }
   // Pending entries are individual origin-scoped keys. Two tabs appending
   // different real finishes cannot overwrite a shared JSON-array catalog.
@@ -285,6 +374,7 @@ export class LeaderboardClient {
   }
   get pendingCount(){return this.restorePending().length;}
   async sendPending(entry){
+    const cacheEpoch=this.boardCacheEpoch;
     const send=async()=>{
       const latest=this.restorePending().find(value=>value.submissionId===entry.submissionId);
       if(!latest)return null; // Another tab already received the same acknowledgement.
@@ -324,7 +414,7 @@ export class LeaderboardClient {
         }
         // Receipt identity is client-side acknowledgement metadata only; it
         // never changes the immutable request or the server's ranking rows.
-        return {...this.adoptBoard(board),submissionId:entry.submissionId};
+        return {...this.adoptBoard(board,{cacheEpoch}),submissionId:entry.submissionId};
       }catch{
         this.profile=null;this.retryAfter.set(entry.submissionId,Date.now()+1000);
         const extra={syncError:true,submissionPending:true,pendingDurable:!this.volatileEntries.has(entry.submissionId)};
@@ -365,6 +455,7 @@ export class LeaderboardClient {
       if(previous.seconds!==value)return Promise.reject(new Error('Submission already used'));
       return previous.promise;
     }
+    this.invalidateBoardCache({bump:true});
     let entry;
     if(this.serverEnabled){
       const existing=this.restorePending().find(item=>item.submissionId===submissionId);
@@ -397,6 +488,7 @@ export class LeaderboardClient {
   updateNickname(value,{seconds=null,localOnly=false,stage=STAGE}={}) {
     rankingStage(stage);
     const name=cleanNickname(value);
+    this.invalidateBoardCache({bump:true});const cacheEpoch=this.boardCacheEpoch;
     this.queuedNicknameEdits++;
     // An explicit valid edit supersedes a failed legacy preferred-name sync.
     // Establish identity without first retrying that obsolete name.
@@ -408,7 +500,7 @@ export class LeaderboardClient {
         const profile=await this.request('./api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:name})});
         const saved=this.adoptProfile(profile);this.setNickname(saved.nickname);
         if(this.pendingRemoteNickname===name){this.pendingRemoteNickname=null;if(this.pendingNameKey)this.write(this.pendingNameKey,'');}
-        const board=this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage));
+        const board=this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage),{cacheEpoch});
         return {...board,profileSaved:'server'};
       }catch(error){
         // An unsuccessful edit is not a saved name. Cancel/Retry must not
@@ -421,22 +513,44 @@ export class LeaderboardClient {
   }
   async refreshBoard(seconds,stage){
     if(!this.serverEnabled)return this.localBoard(seconds,{stage});
-    try {await this.ensureProfile();return this.adoptBoard(validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage));}
-    catch {
+    const cacheEpoch=this.boardCacheEpoch;
+    try {
+      this.reloadRemoteIdentity();
+      // Returning remote clients already hold a confirmed bearer identity.
+      // The authenticated ranking response also carries its canonical profile,
+      // so a redundant profile round trip only delays the same read.
+      if(!(this.apiBase&&this.token&&this.confirmedPlayerId&&!this.invalidStoredCredential&&!this.pendingRemoteNickname))
+        await this.ensureProfile();
+      const stamp=this.apiBase?JSON.stringify([this.token,this.confirmedPlayerId,this.read(this.tokenKey),this.read(this.playerKey)]):null;
+      const board=validateBoard(await this.request(`./api/leaderboard?stage=${encodeURIComponent(stage)}`),stage);
+      this.reloadRemoteIdentity();
+      if(stamp!==null&&stamp!==JSON.stringify([this.token,this.confirmedPlayerId,this.read(this.tokenKey),this.read(this.playerKey)]))
+        return {...cleanBoardSnapshot(board,null),identityWarning:true};
+      return this.adoptBoard(board,{cacheEpoch});
+    }catch(error) {
+      if(/\((?:401|403)\)/.test(error?.message||''))this.invalidateBoardCache();
       this.profile=null;
       if(this.apiBase){try{return await this.publicBoard(stage);}catch{}}
       return {...this.localBoard(seconds,{stage}),syncError:true};
     }
   }
-  refresh(seconds,{stage=STAGE,force=false}={}) {
-    rankingStage(stage);
-    return this.enqueue(async()=>{
+  refresh(seconds,{stage=STAGE,force=false,retryPending=true}={}) {
+    rankingStage(stage);this.reloadRemoteIdentity();
+    const key=JSON.stringify([this.boardCacheEpoch,stage,force,retryPending,normalizeSeconds(seconds)]);
+    if(!force&&this.refreshPromises.has(key))return this.refreshPromises.get(key);
+    const promise=this.enqueue(async()=>{
       if(!this.serverEnabled)return this.localBoard(seconds,{stage});
-      await this.flushEntries({stage,force});
+      if(retryPending)await this.flushEntries({stage,force});
       const board=await this.refreshBoard(seconds,stage),pendingCount=this.pendingCount;
       return pendingCount?{...board,submissionPending:true,pendingCount}:board;
     });
+    if(!force){
+      this.refreshPromises.set(key,promise);
+      void promise.finally(()=>{if(this.refreshPromises.get(key)===promise)this.refreshPromises.delete(key);}).catch(()=>{});
+    }
+    return promise;
   }
+
 
 }
 
