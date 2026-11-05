@@ -1,4 +1,4 @@
-import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.41.0';
+import { STAGE, normalizeSeconds, readBest, saveBest } from './records.js?v=0.41.1';
 
 // Aggregate views are derived reads; every completion keeps its original stage.
 export const ALL_STAGE=STAGE.endsWith('-qa')?'all-qa':'all';

@@ -1,12 +1,8 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.41.0';
-
 // v41 relaxes arrival and wall resistance; original ledgers and receipts remain intact.
 export const STAGE = 'studio-easy-check16-v41';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;
-const NATIVE_SHARE_TIMEOUT_MS = 5000;
-const pendingNativeShares = new WeakSet();
 
 // Compare exactly what the two-decimal result UI shows.
 export function normalizeSeconds(seconds) {
@@ -83,53 +79,17 @@ async function copyBeforeDeadline(clipboard, text, timeoutMs) {
   }
 }
 
-async function shareBeforeDeadline(nav, payload, timeoutMs) {
-  let timer;
-  const delay=Number.isFinite(timeoutMs)?Math.max(0,timeoutMs):NATIVE_SHARE_TIMEOUT_MS;
-  try {
-    // Some embedded browsers expose share() without ever opening or settling
-    // a sheet. A timeout offers the manual link; it must not also copy while
-    // an unresolved native sheet could still complete.
-    pendingNativeShares.add(nav);
-    let native;
-    try {native=nav.share(payload);} catch(error) {pendingNativeShares.delete(nav);throw error;}
-    const shared=Promise.resolve(native).then(
-      ()=>{pendingNativeShares.delete(nav);return true;},
-      error=>{pendingNativeShares.delete(nav);throw error;},
-    );
-    return await Promise.race([
-      shared,
-      new Promise(resolve=>{timer=setTimeout(()=>resolve(false),delay);}),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-export async function shareResult({ navigator: nav, url, seconds, clipboardTimeoutMs = CLIPBOARD_TIMEOUT_MS, nativeShareTimeoutMs = NATIVE_SHARE_TIMEOUT_MS }) {
-  const result = normalizeSeconds(seconds);
+// SHARE is intentionally a copy-link action on every device. Never open a
+// native share sheet or add a message around the URL the player will paste.
+export async function shareResult({ navigator: nav, url, seconds, clipboardTimeoutMs = CLIPBOARD_TIMEOUT_MS }) {
   const challengeUrl = buildChallengeUrl(url, seconds);
-  const text = `I moved all ${TOTAL_FURNITURE} pieces in ${result.toFixed(2)}s on Room to Boom! Can you beat me? 🏠💥`;
-  const output = { url: challengeUrl, text };
-  const payload = { title: 'Room to Boom!', text, url: challengeUrl };
-  if (pendingNativeShares.has(nav)) return { ...output, status: 'manual' };
-  if (typeof nav?.share === 'function') {
-    try {
-      if (typeof nav.canShare !== 'function' || nav.canShare(payload)) {
-        const shared=await shareBeforeDeadline(nav,payload,nativeShareTimeoutMs);
-        return { ...output, status: shared?'shared':'manual' };
-      }
-    } catch (error) {
-      if (error?.name === 'AbortError') return { ...output, status: 'cancelled' };
-    }
-  }
   try {
     if (typeof nav?.clipboard?.writeText === 'function') {
-      const copied=await copyBeforeDeadline(nav.clipboard,`${text}\n${challengeUrl}`,clipboardTimeoutMs);
-      if(copied)return { ...output, status: 'copied' };
+      const copied = await copyBeforeDeadline(nav.clipboard, challengeUrl, clipboardTimeoutMs);
+      if (copied) return { url: challengeUrl, status: 'copied' };
     }
   } catch {
-    // The caller displays the selectable link when clipboard permission is denied or unanswered.
+    // Keep a selectable URL available when copying is blocked or unavailable.
   }
-  return { ...output, status: 'manual' };
+  return { url: challengeUrl, status: 'manual' };
 }

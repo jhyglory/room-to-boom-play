@@ -2,10 +2,10 @@ import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD, DELIVERY_OVERL
 import { GameRenderer } from './render.js?v=0.41.0';
 import { WALL_RENDER } from './assets.js?v=0.40.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.41.0';
+import { saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.41.1';
 import { GameAudio } from './audio.js?v=0.38.0';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, ALL_STAGE, readAllTimeBest, cacheAllTimeBest } from './leaderboard.js?v=0.41.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, ALL_STAGE, readAllTimeBest, cacheAllTimeBest } from './leaderboard.js?v=0.41.1';
 import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.30.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
@@ -590,16 +590,16 @@ $('share-result').addEventListener('click',async()=>{
   const version=runVersion;
   $('share-result').disabled=true;
   $('share-url').value=buildChallengeUrl(pageUrl,resultSeconds);
-  $('manual-share').hidden=false;
-  $('share-status').textContent='Share your move, or copy the challenge link below.';
+  $('manual-share').hidden=true;
+  $('share-status').textContent='Copying link…';
   try{
     const shared=await shareResult({navigator:window.navigator,url:pageUrl,seconds:resultSeconds});
     if(version!==runVersion||phase!=='complete')return;
     $('manual-share').hidden=shared.status!=='manual';
     if(shared.status==='manual'){$('share-url').value=shared.url;$('share-url').focus();$('share-url').select();}
-    $('share-status').textContent=shared.status==='shared'?'Challenge shared.':shared.status==='copied'?'Challenge link copied!':shared.status==='manual'?'Select and copy the link below.':'';
+    $('share-status').textContent=shared.status==='copied'?'Link copied!':'Select and copy the link below.';
   }catch{
-    if(version===runVersion)$('share-status').textContent='Sharing is unavailable. Please try again.';
+    if(version===runVersion)$('share-status').textContent='Could not copy the link. Please try again.';
   }finally{if(version===runVersion)$('share-result').disabled=false;}
 });
 $('share-url').addEventListener('click',()=>$('share-url').select());

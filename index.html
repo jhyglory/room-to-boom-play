@@ -25,12 +25,12 @@
   <title>Room to Boom! — Moving day</title>
   <link rel="preload" href="./fonts/fredoka-bold-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="./fonts/nunito-latin-variable.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./style.css?v=0.41.0">
+  <link rel="stylesheet" href="./style.css?v=0.41.1">
   <link rel="preload" href="./assets/leaderboard/result-title-en.png" as="image">
-  <link rel="stylesheet" href="./result.css?v=0.41.0">
+  <link rel="stylesheet" href="./result.css?v=0.41.1">
 </head>
 <body>
-  <main class="playground" data-build="0.41.0">
+  <main class="playground" data-build="0.41.1">
     <header class="site-header">
       <a class="brand" href="./" aria-label="Room to Boom home"><img src="./assets/brand/room-to-boom-golden-toy.png" width="2172" height="724" alt="Room to Boom!" decoding="async" fetchpriority="high" draggable="false"></a>
       <div class="stage-line"><span class="stage-kicker">STUDIO SLINGSHOT</span><span class="difficulty-label" title="16 close-packed pieces · light pieces coast farther · heavy pieces resist">TIGHT · 16</span><span class="stage-badge">STAGE 01</span></div>
@@ -116,7 +116,7 @@
         </details>
         <div class="result-actions">
           <button id="retry-result" type="button" aria-label="Try again"><span class="result-button-art" aria-hidden="true"><img src="./assets/leaderboard/components/button-retry-en.png" width="2172" height="724" alt="" draggable="false"></span></button>
-          <button id="share-result" type="button" aria-label="Share"><span class="result-button-art" aria-hidden="true"><img src="./assets/leaderboard/components/button-share-en.png" width="1908" height="824" alt="" draggable="false"></span></button>
+          <button id="share-result" type="button" aria-label="Copy challenge link"><span class="result-button-art" aria-hidden="true"><img src="./assets/leaderboard/components/button-share-en.png" width="1908" height="824" alt="" draggable="false"></span></button>
           <button id="result-main" type="button" aria-label="Main menu" hidden><span class="result-button-art" aria-hidden="true"><img src="./assets/leaderboard/components/button-home-en.png" width="1821" height="864" alt="" draggable="false"></span></button>
         </div>
         <div class="result-footer-secondary"><p id="result-sync-state" class="sr-only" role="status" aria-live="polite"></p><div class="result-share"><div class="result-share-content"><p id="share-status" role="status" aria-live="polite"></p><label id="manual-share" class="manual-share" hidden>Copy challenge link<input id="share-url" type="text" readonly aria-label="Challenge link"></label></div></div></div>
@@ -128,6 +128,6 @@
   <dialog id="restart-dialog"><form method="dialog"><span class="card-eyebrow">A FRESH START?</span><h2>Another moving day.</h2><p>This run will reset to the original layout.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">Keep this run</button><button value="restart" class="primary-button">Start over ↻</button></div></form></dialog>
   <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
   <script src="./vendor/matter.min.js"></script>
-  <script type="module" src="./app.js?v=0.41.0"></script>
+  <script type="module" src="./app.js?v=0.41.1"></script>
 </body>
 </html>
