@@ -621,6 +621,7 @@ $('share-result').addEventListener('click',async()=>{
     $('manual-share').hidden=shared.status!=='manual';
     if(shared.status==='manual'){$('share-url').value=shared.url;$('share-url').focus();$('share-url').select();}
     $('share-status').textContent=shared.status==='copied'?'Link copied!':'Select and copy the link below.';
+    if(shared.status==='copied')window.alert?.('Link copied!');
   }catch{
     if(version===runVersion)$('share-status').textContent='Could not copy the link. Please try again.';
   }finally{if(version===runVersion)$('share-result').disabled=false;}
