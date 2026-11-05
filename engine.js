@@ -131,8 +131,9 @@ export const PHYSICS = Object.freeze({
   wallEnergyPerHealth: 84,
   wallElasticEnergy: 72,
   wallEnergyTransfer: .65,
-  // Preserve v29 global plaster resistance; only the lamp gains efficiency.
-  wallDamageScale: 1/3,
+  // v41:20% more damage from the same eligible physical impact.
+  // Speed/angle gates and fresh-strike separation stay unchanged.
+  wallDamageScale: (1/3)*1.2,
   wallRestitution: WALL_RESTITUTION,
   wallIntactEnergyPerHealth: 240,
   wallIntactMinEnergy: 900,
@@ -157,7 +158,10 @@ const STEP = PHYSICS.stepMs;
 const MAX_SPEED = PHYSICS.speedCap;
 const MAX_PULL = PHYSICS.maxPull;
 
-export const DELIVERY_OVERLAP_REQUIRED = .8;
+// v41 accepts a clear majority of the real body sooner; leaving that same
+// threshold immediately revokes the check during active play.
+export const DELIVERY_OVERLAP_REQUIRED = .7;
+export const DELIVERY_SETTLE_MS = 350;
 
 function polygonArea(vertices) {
   let twiceArea = 0;
@@ -556,10 +560,10 @@ export class MovingWorld {
       }
       body.game.deliveryState = aiming ? 'aiming' : inside ? 'settling' : 'outside';
       body.game.settled = inside && calm ? body.game.settled + dt : 0;
-      if (body.game.settled + .0001 >= 500) {
+      if (body.game.settled + .0001 >= DELIVERY_SETTLE_MS) {
         body.game.delivered = true;
         body.game.deliveryState = 'moved';
-        body.game.settled = 500;
+        body.game.settled = DELIVERY_SETTLE_MS;
         newlyDelivered.push(body);
       }
     }

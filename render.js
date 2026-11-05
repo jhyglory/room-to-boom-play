@@ -1,4 +1,4 @@
-import { WORLD } from './engine.js?v=0.37.0';
+import { WORLD, DELIVERY_OVERLAP_REQUIRED, DELIVERY_SETTLE_MS } from './engine.js?v=0.41.0';
 import { DEFAULT_VIEW, expandedCameraView, projection } from './camera.js?v=0.40.0';
 import { assets as defaultAssets, ASSET_SPECS, FURNITURE_ASSET_IDS, furnitureVisualBounds, spritePlacement, WALL_RENDER } from './assets.js?v=0.40.0';
 import { furnitureDamageArt } from './furniture-damage-art.js?v=0.40.0';
@@ -9,6 +9,7 @@ const WIDTH = WORLD.width;
 const HEIGHT = WORLD.height;
 const ROOMS = WORLD.rooms;
 const CENTER_X = WIDTH / 2;
+const DELIVERY_PERCENT = Math.round(DELIVERY_OVERLAP_REQUIRED * 100);
 
 const C = {
   ink: '#4a3b35',
@@ -856,7 +857,7 @@ export class GameRenderer {
       stroke(ctx, [[w / 2 - 8, -h / 2 + 2], [w / 2 - 4, -h / 2 + 6], [w / 2 + 2, -h / 2 - 2]], '#639666', 2.5);
     } else if (g.settled > 0 || g.deliveryState === 'settling') {
       ellipse(ctx, w / 2 - 3, -h / 2, 11, 11, C.cream, '#bed4b0', 1.5);
-      ctx.beginPath(); ctx.arc(w / 2 - 3, -h / 2, 11, -Math.PI / 2, -Math.PI / 2 + Math.min(1, g.settled / 500) * Math.PI * 2);
+      ctx.beginPath(); ctx.arc(w / 2 - 3, -h / 2, 11, -Math.PI / 2, -Math.PI / 2 + Math.min(1, g.settled / DELIVERY_SETTLE_MS) * Math.PI * 2);
       ctx.strokeStyle = '#78a47f'; ctx.lineWidth = 4; ctx.stroke();
     }
     ctx.restore();
@@ -866,21 +867,21 @@ export class GameRenderer {
   drawDeliveryHint(ctx, body) {
     const g = body.game;
     if (!g.deliveryState || g.deliveryState === 'moved') return;
-    let label = '80% INSIDE MINT ↑';
+    let label = `${DELIVERY_PERCENT}% INSIDE MINT ↑`;
     let color = '#a8772e';
     if (g.deliveryState === 'settling') {
-      label = 'SETTLING · 0.5s'; color = '#5f8c69';
-    } else if (g.deliveryState === 'aiming' && g.deliveryOverlap >= .8) {
+      label = `SETTLING · ${(DELIVERY_SETTLE_MS/1000).toFixed(2)}s`; color = '#5f8c69';
+    } else if (g.deliveryState === 'aiming' && g.deliveryOverlap >= DELIVERY_OVERLAP_REQUIRED) {
       label = 'RELEASE TO SETTLE'; color = '#5f8c69';
     } else if (body.position.y <= WORLD.delivery.maxY && g.deliveryProtrusion > 0) {
-      label = 'BRING 80% INSIDE';
+      label = `BRING ${DELIVERY_PERCENT}% INSIDE`;
     }
     const x = Math.max(104, Math.min(WIDTH - 104, body.position.x));
     const y = Math.max(58, Math.min(874, body.position.y - g.h / 2 - 22));
     rounded(ctx, x - 91, y - 13, 182, 26, 8, '#fff8e9f2', color, 1.5);
     text(ctx, label, x, y, 10, color, 800);
     if (g.deliveryState === 'settling') {
-      const progress = Math.max(0, Math.min(1, g.settled / 500));
+      const progress = Math.max(0, Math.min(1, g.settled / DELIVERY_SETTLE_MS));
       rounded(ctx, x - 78, y + 8, 156 * progress, 3, 1.5, '#84b78b');
     }
   }

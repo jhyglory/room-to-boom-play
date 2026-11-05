@@ -1,7 +1,7 @@
-import { TOTAL_FURNITURE } from './engine.js?v=0.37.0';
+import { TOTAL_FURNITURE } from './engine.js?v=0.41.0';
 
-// v37 adds bounded physical crumpling; original ledgers and completion receipts remain intact.
-export const STAGE = 'studio-crumple16-v37';
+// v41 relaxes arrival and wall resistance; original ledgers and receipts remain intact.
+export const STAGE = 'studio-easy-check16-v41';
 export const BEST_KEY = `room-to-boom:best:${STAGE}`;
 const MAX_SECONDS = 86400;
 const CLIPBOARD_TIMEOUT_MS = 1500;

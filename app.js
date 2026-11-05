@@ -1,17 +1,18 @@
-import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD } from './engine.js?v=0.37.0';
-import { GameRenderer } from './render.js?v=0.40.0';
+import { MovingWorld, PHYSICS, FURNITURE, TOTAL_FURNITURE, WORLD, DELIVERY_OVERLAP_REQUIRED, DELIVERY_SETTLE_MS } from './engine.js?v=0.41.0';
+import { GameRenderer } from './render.js?v=0.41.0';
 import { WALL_RENDER } from './assets.js?v=0.40.0';
 import { RunClock, formatSeconds } from './clock.js';
-import { saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.37.0';
+import { saveBest, parseChallenge, buildChallengeUrl, shareResult } from './records.js?v=0.41.0';
 import { GameAudio } from './audio.js?v=0.38.0';
 import { ImpactPresentation } from './impact-presentation.js?v=0.12.0';
-import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, ALL_STAGE, readAllTimeBest, cacheAllTimeBest } from './leaderboard.js?v=0.37.0';
+import { LeaderboardClient, makeSubmissionId, renderLeaderboardHTML, rankLabel, ALL_STAGE, readAllTimeBest, cacheAllTimeBest } from './leaderboard.js?v=0.41.0';
 import { LEADERBOARD_MODE, LEADERBOARD_API_BASE } from './runtime-config.js?v=0.30.0';
 
 function storage(){try{return window.localStorage;}catch{return null;}}
 function readSetting(key){try{return storage()?.getItem(key);}catch{return null;}}
 function saveSetting(key,value){try{storage()?.setItem(key,value);}catch{}}
 
+const DELIVERY_PERCENT = Math.round(DELIVERY_OVERLAP_REQUIRED * 100);
 const $ = id => document.getElementById(id);
 const canvas = $('game');
 const world = new MovingWorld();
@@ -179,10 +180,10 @@ function updateDeliveryHint(now){
   const name=itemNames[body.game.id]||body.game.id;
   const state=body.game.deliveryState;
   if(state==='settling'){
-    const percent=Math.min(100,Math.round((body.game.settled||0)/5));
+    const percent=Math.min(100,Math.round((body.game.settled||0)/DELIVERY_SETTLE_MS*100));
     $('live-hint').textContent=`${name} is inside · settling ${percent}%. Let it come to rest.`;
   }else if(state==='outside'&&remaining.length===1){
-    $('live-hint').textContent=`${name} is the last piece. Bring at least 80% inside the upstairs mint floor.`;
+    $('live-hint').textContent=`${name} is the last piece. Bring at least ${DELIVERY_PERCENT}% inside the upstairs mint floor.`;
   }
 }
 function isRankingScreen(){return phase==='complete'||phase==='rankings';}
@@ -477,7 +478,7 @@ world.onUndeliver = body => {
   updateProgress();
   hintUntil=performance.now()+1400;
   const name=itemNames[body.game.id]||body.game.id;
-  $('live-hint').textContent=`${name} slipped out. Bring at least 80% back inside and let it settle.`;
+  $('live-hint').textContent=`${name} slipped out. Bring at least ${DELIVERY_PERCENT}% back inside and let it settle.`;
   announce(`${name} is no longer home. ${world.moved} of ${TOTAL_FURNITURE} moved.`);
 };
 function observeWallImpact(type,wall,info){
@@ -566,7 +567,7 @@ canvas.addEventListener('pointerup',event=>{
   }
   release();hintUntil=performance.now()+700;
   $('live-hint').textContent=launched?'Catch a rebound: tap moving furniture to stop it.':
-    wasCaught?'Stopped. Leave at least 80% inside NEW HOME to settle.':'Pull farther back, then release to launch.';
+    wasCaught?`Stopped. Leave at least ${DELIVERY_PERCENT}% inside NEW HOME to settle.`:'Pull farther back, then release to launch.';
   if(launched)showCoach('catch','CATCH THE REBOUND','Tap moving furniture to stop it.',5000);
 });
 canvas.addEventListener('pointercancel',event=>{if(event.pointerId===pointerId){advanceSimulation(performance.now());release();}});
@@ -666,7 +667,7 @@ const completionQA=(()=>{try{const url=new URL(window.location.href);return ['12
 if(completionQA)canvas.addEventListener('room-to-boom:inspect',event=>{
   if(!event.detail||typeof event.detail!=='object')return;
   const activeBodies=new Set(world.M.Composite.allBodies(world.engine.world));
-  event.detail.snapshot={phase,moved:world.moved,resultSeconds,world:JSON.parse(JSON.stringify(WORLD)),wallRender:{opaqueHeight:WALL_RENDER.opaqueHeight},camera:{...renderer.view},transform:renderer.screenTransform(),cssScale:renderer.cssScale,
+  event.detail.snapshot={phase,moved:world.moved,resultSeconds,deliveryRules:{overlapRequired:DELIVERY_OVERLAP_REQUIRED,settleMs:DELIVERY_SETTLE_MS},world:JSON.parse(JSON.stringify(WORLD)),wallRender:{opaqueHeight:WALL_RENDER.opaqueHeight},camera:{...renderer.view},transform:renderer.screenTransform(),cssScale:renderer.cssScale,
     grabbed:world.grabbed?.game.id??null,aim:world.aim?JSON.parse(JSON.stringify(world.aim)):null,
     impacts:diagnosticImpacts.map(event=>({...event,point:event.point?{...event.point}:null})),maxPull:PHYSICS.maxPull,
     bodies:world.bodies.map(body=>({id:body.game.id,position:{...body.position},velocity:{...world.M.Body.getVelocity(body)},mass:body.mass,restitution:body.restitution,angle:body.angle,angularVelocity:world.M.Body.getAngularVelocity(body),vertices:body.vertices.map(({x,y})=>({x,y})),w:body.game.w,h:body.game.h,
